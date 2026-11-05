@@ -660,6 +660,18 @@ const Player = (() => {
   let coda = [], ordineOriginale = [], indice = -1;
   let casuale = leggiPref('casuale', false), ripeti = leggiPref('ripeti', false);
   let inRiproduzione = false, trascinando = false, erroriDiFila = 0;
+  let videoVisibile = leggiPref('video', false); // di default si sente solo l'audio
+
+  function mostraVideo(si, salva = true) {
+    videoVisibile = si;
+    if (salva) salvaPref('video', si);
+    $('#video').classList.toggle('nascosto', !si);
+    document.body.classList.toggle('has-video', si && !!corrente());
+    const b = $('#btn-video');
+    b.setAttribute('aria-pressed', String(si));
+    b.title = si ? 'Nascondi video' : 'Mostra video';
+    b.setAttribute('aria-label', b.title);
+  }
 
   const corrente = () => (indice >= 0 ? coda[indice] : null);
 
@@ -699,7 +711,8 @@ const Player = (() => {
     if (!c) return;
     $('#player').hidden = false;
     $('#video').hidden = false;
-    document.body.classList.add('playing-ui', 'has-video');
+    document.body.classList.add('playing-ui');
+    document.body.classList.toggle('has-video', videoVisibile);
     $('#np-title').textContent = c.titolo;
     $('#np-artist').textContent = c.artista;
     $('#np-thumb').src = thumb(c.videoId);
@@ -822,6 +835,9 @@ const Player = (() => {
     $('#btn-repeat').onclick = toggleRipeti;
     $('#np-like').onclick = () => { const c = corrente(); if (c) togglePreferito(c); };
     $('#btn-video-size').onclick = () => document.body.classList.toggle('video-big', $('#video').classList.toggle('big'));
+    $('#btn-video').onclick = () => mostraVideo(!videoVisibile);
+    $('#btn-video-close').onclick = () => mostraVideo(false);
+    mostraVideo(videoVisibile, false);
 
     const seek = $('#seek');
     seek.addEventListener('input', () => {

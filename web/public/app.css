@@ -229,7 +229,11 @@ input[type="range"]::-moz-range-progress { background: var(--cyan); height: 4px;
 .video-frame { aspect-ratio: 16 / 9; min-height: 200px; }
 .video.big .video-frame { min-height: 0; }
 .video-frame iframe, #yt { width: 100%; height: 100%; display: block; border: 0; }
-.video-size { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.55); color: #fff; width: 32px; height: 32px; font-size: 15px; }
+.video-tools { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.video-tools .btn-icon { background: rgba(0,0,0,.55); color: #fff; width: 32px; height: 32px; font-size: 15px; }
+/* nascosto ma ancora "acceso": così l'audio continua a suonare */
+.video.nascosto { opacity: 0; pointer-events: none; z-index: -1; }
+.video-toggle { font-size: 17px; }
 
 /* ---------- menu, dialog, notifiche ---------- */
 .menu {

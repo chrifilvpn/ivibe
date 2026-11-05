@@ -91,10 +91,13 @@
     <main class="content" id="content" tabindex="-1"></main>
   </div>
 
-  <!-- Video YouTube (le regole di YouTube chiedono che il player resti visibile) -->
+  <!-- Video YouTube: di default è nascosto (si sente solo l'audio), si mostra con il pulsante ▣ -->
   <section id="video" class="video" hidden aria-label="Video">
     <div class="video-frame"><div id="yt"></div></div>
-    <button class="btn-icon video-size" id="btn-video-size" title="Ingrandisci / riduci" aria-label="Ingrandisci o riduci il video">⤢</button>
+    <div class="video-tools">
+      <button class="btn-icon" id="btn-video-size" title="Ingrandisci / riduci" aria-label="Ingrandisci o riduci il video">⤢</button>
+      <button class="btn-icon" id="btn-video-close" title="Nascondi video" aria-label="Nascondi video">✕</button>
+    </div>
   </section>
 
   <!-- Barra del lettore -->
@@ -106,6 +109,7 @@
         <div class="np-artist" id="np-artist"></div>
       </div>
       <button class="btn-icon like" id="np-like" aria-label="Aggiungi ai preferiti">♡</button>
+      <button class="btn-icon video-toggle" id="btn-video" title="Mostra video" aria-label="Mostra video" aria-pressed="false">▣</button>
     </div>
     <div class="controls">
       <div class="buttons">
