@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+
+<VBox xmlns="http://javafx.com/javafx/25"
+      xmlns:fx="http://javafx.com/fxml/1"
+      spacing="15"
+      style="-fx-padding: 20; -fx-background-color: rgba(0,0,0,0.35);">
+
+    <Label text="❤ Preferiti"
+           style="-fx-text-fill: white; -fx-font-size: 24;"/>
+
+    <Label text="Qui compariranno le tue canzoni preferite"
+           style="-fx-text-fill: #aaa;"/>
+
+</VBox>

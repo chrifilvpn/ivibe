@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.media.*?>
+
+<AnchorPane prefHeight="768.0" prefWidth="1024.0"
+            xmlns="http://javafx.com/javafx/25"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.RiproduzioneController"
+            style="-fx-background-color: linear-gradient(to bottom right, #141e30, #243b55);">
+
+    <children>
+
+        <VBox alignment="CENTER" spacing="15"
+              AnchorPane.topAnchor="40"
+              AnchorPane.bottomAnchor="40"
+              AnchorPane.leftAnchor="40"
+              AnchorPane.rightAnchor="40"
+              style="-fx-background-color: rgba(0,0,0,0.85);
+                     -fx-background-radius: 20;
+                     -fx-padding: 20;">
+
+            <MediaView fx:id="mediaView"
+                       fitWidth="700"
+                       fitHeight="400"
+                       preserveRatio="true"
+                       style="-fx-background-radius: 10;"/>
+
+            <Label fx:id="titolo_lbl"
+                   text="Nessuna canzone"
+                   style="-fx-text-fill: white; -fx-font-size: 20;"/>
+
+            <Slider fx:id="progressSlider"
+                    prefWidth="600"
+                    style="-fx-background-radius: 10;"/>
+
+            <HBox alignment="CENTER" spacing="15">
+
+                <Button text="▶"
+                        fx:id="play_btn"
+                        onAction="#play"
+                        style="-fx-background-color: #38bdf8;
+                               -fx-background-radius: 10;
+                               -fx-padding: 10 15;"/>
+
+                <Button text="⏸"
+                        fx:id="pause_btn"
+                        onAction="#pause"
+                        style="-fx-background-color: #1e293b;
+                               -fx-text-fill: white;
+                               -fx-background-radius: 10;
+                               -fx-padding: 10 15;"/>
+
+                <Button text="⏹"
+                        fx:id="stop_btn"
+                        onAction="#stop"
+                        style="-fx-background-color: #ef4444;
+                               -fx-text-fill: white;
+                               -fx-background-radius: 10;
+                               -fx-padding: 10 15;"/>
+
+                <Label text="🔊"
+                       style="-fx-text-fill: white;"/>
+
+                <Slider fx:id="volumeSlider"
+                        prefWidth="120"
+                        style="-fx-background-radius: 10;"/>
+
+            </HBox>
+
+        </VBox>
+
+    </children>
+</AnchorPane>

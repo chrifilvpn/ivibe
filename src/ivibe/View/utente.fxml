@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane fx:id="rootPane"
+            xmlns="http://javafx.com/javafx/8"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.UtenteController"
+            maxWidth="Infinity"
+            maxHeight="Infinity"
+            style="-fx-background-color: linear-gradient(to bottom right, #36105d, #7d0950);">
+
+    
+    <left>
+        <VBox spacing="20"
+              prefWidth="220"
+              maxHeight="Infinity"
+              style="-fx-background-color: rgba(0,0,0,0.85); -fx-padding: 20;">
+
+            <Label text="iVibe"
+                   style="-fx-text-fill: white; -fx-font-size: 22; -fx-font-weight: bold;"/>
+
+            <Button text="🏠 Home" onAction="#apriHome"
+                    style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+            <Button text="❤ Preferiti" onAction="#apriPreferiti"
+                    style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+            <Button text="🎧 Playlist" onAction="#apriPlaylist"
+                    style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+            <Button text="⚙ Impostazioni"
+                    onAction="#apriImpostazioni"
+                    style="-fx-background-color: linear-gradient(to right, #1e293b, #334155);
+                           -fx-text-fill: white;
+                           -fx-background-radius: 10;
+                           -fx-padding: 10 15;"/>
+
+            <Region VBox.vgrow="ALWAYS"/>
+
+            <Button text="🚪 Logout"
+                    onAction="#logout"
+                    style="-fx-background-color: transparent; -fx-text-fill: #f87171;"/>
+        </VBox>
+    </left>
+
+    <center>
+        <VBox spacing="15"
+              maxWidth="Infinity"
+              maxHeight="Infinity"
+              VBox.vgrow="ALWAYS"
+              style="-fx-padding: 25;
+                     -fx-background-color: rgba(0,0,0,0.35);
+                     -fx-background-radius: 20;">
+
+            <!-- SEARCH -->
+            <TextField fx:id="searchField"
+                       promptText="Cerca canzone o artista..."
+                       style="-fx-background-color: #1e293b;
+                              -fx-text-fill: white;
+                              -fx-prompt-text-fill: #94a3b8;
+                              -fx-background-radius: 20;
+                              -fx-padding: 10 15;"/>
+
+            <VBox fx:id="playlistSection"
+                  spacing="10"
+                  visible="false"
+                  managed="false"
+                  VBox.vgrow="ALWAYS"
+                  maxWidth="Infinity"
+                  maxHeight="Infinity">
+
+                <HBox spacing="10"
+                      style="-fx-padding: 10;
+                             -fx-background-color: rgba(0,0,0,0.4);
+                             -fx-background-radius: 10;">
+
+                    <TextField fx:id="playlistNameField"
+                               promptText="Nome playlist..."
+                               style="-fx-background-color: #1e293b;
+                                      -fx-text-fill: white;"/>
+
+                    <Button text="Crea"
+                            onAction="#creaPlaylist"
+                            style="-fx-background-color: #38bdf8;
+                                   -fx-text-fill: black;
+                                   -fx-background-radius: 8;"/>
+
+                    <Label fx:id="playlistErrorLabel"
+                           text=""
+                           style="-fx-text-fill: #f87171;
+                                  -fx-font-size: 12;
+                                  -fx-padding: 5 0 0 10;"/>
+                </HBox>
+
+                <Label text="Le tue Playlist"
+                       style="-fx-text-fill: white;
+                              -fx-font-size: 18;
+                              -fx-font-weight: bold;"/>
+
+                <FlowPane fx:id="playlistContainer"
+                          hgap="15"
+                          vgap="15"
+                          prefWrapLength="1000"
+                          maxWidth="Infinity"
+                          style="-fx-padding: 10;"/>
+
+                <HBox fx:id="dettaglioHBox"
+                      spacing="20"
+                      visible="false"
+                      managed="false"
+                      VBox.vgrow="ALWAYS"
+                      HBox.hgrow="ALWAYS"
+                      maxWidth="Infinity"
+                      maxHeight="Infinity">
+
+                    <VBox spacing="8"
+                          HBox.hgrow="ALWAYS"
+                          VBox.vgrow="ALWAYS"
+                          maxWidth="Infinity">
+
+                        <Label text="Tutte le canzoni"
+                               style="-fx-text-fill: #94a3b8;
+                                      -fx-font-weight: bold;"/>
+
+                        <TextField fx:id="searchAggiungiField"
+                                   promptText="Cerca..."
+                                   style="-fx-background-color: #1e293b;
+                                          -fx-text-fill: white;
+                                          -fx-prompt-text-fill: #94a3b8;
+                                          -fx-background-radius: 10;
+                                          -fx-padding: 6 10;"/>
+
+                        <ScrollPane fitToWidth="true"
+                                    fitToHeight="true"
+                                    VBox.vgrow="ALWAYS"
+                                    HBox.hgrow="ALWAYS"
+                                    style="-fx-background: transparent;
+                                           -fx-background-color: transparent;">
+                            <VBox fx:id="listaAggiungiBox"
+                                  spacing="4"
+                                  maxWidth="Infinity"/>
+                        </ScrollPane>
+
+                    </VBox>
+
+                    <VBox spacing="8"
+                          HBox.hgrow="ALWAYS"
+                          VBox.vgrow="ALWAYS"
+                          maxWidth="Infinity">
+
+                        <Label fx:id="titoloPlaylistLabel"
+                               text="Playlist"
+                               style="-fx-text-fill: white;
+                                      -fx-font-size: 15;
+                                      -fx-font-weight: bold;"/>
+
+                        <HBox spacing="10">
+
+                            <Button text="🔀 Shuffle"
+                                    onAction="#shufflePlaylist"
+                                    style="-fx-background-color: #7c3aed;
+                                           -fx-text-fill: white;
+                                           -fx-background-radius: 8;
+                                           -fx-padding: 6 14;"/>
+
+                            <Button text="▶ Play"
+                                    onAction="#playPlaylist"
+                                    style="-fx-background-color: #38bdf8;
+                                           -fx-text-fill: black;
+                                           -fx-background-radius: 8;
+                                           -fx-padding: 6 14;"/>
+                        </HBox>
+
+                        <ScrollPane fitToWidth="true"
+                                    fitToHeight="true"
+                                    VBox.vgrow="ALWAYS"
+                                    HBox.hgrow="ALWAYS"
+                                    style="-fx-background: transparent;
+                                           -fx-background-color: transparent;">
+                            <VBox fx:id="listaPlaylistBox"
+                                  spacing="4"
+                                  maxWidth="Infinity"/>
+                        </ScrollPane>
+
+                    </VBox>
+
+                </HBox>
+
+            </VBox>
+
+            <TableView fx:id="tableSongs"
+                       VBox.vgrow="ALWAYS"
+                       maxWidth="Infinity"
+                       maxHeight="Infinity"
+                       style="-fx-background-color: transparent;
+                              -fx-control-inner-background: transparent;
+                              -fx-table-cell-border-color: transparent;
+                              -fx-fixed-cell-size: 45;">
+
+                <columns>
+                    <TableColumn fx:id="colTitolo" text="Titolo"/>
+                    <TableColumn fx:id="colArtista" text="Artista"/>
+                    <TableColumn fx:id="colLike" text="❤" maxWidth="80"/>
+                    <TableColumn fx:id="colPlay" text="▶" maxWidth="80"/>
+                </columns>
+
+            </TableView>
+
+        </VBox>
+    </center>
+
+    <bottom>
+        <HBox alignment="CENTER_LEFT" spacing="20"
+              style="-fx-background-color: rgba(0,0,0,0.85);
+                     -fx-padding: 10 20;">
+
+            <Label fx:id="nowPlayingLabel"
+                   text="🎵 Nessuna canzone"
+                   style="-fx-text-fill: white;"/>
+
+            <Region HBox.hgrow="ALWAYS"/>
+
+            <Button text="▶"
+                    style="-fx-background-color: #38bdf8;
+                           -fx-text-fill: black;
+                           -fx-background-radius: 15;
+                           -fx-padding: 6 14;"/>
+
+        </HBox>
+    </bottom>
+
+</BorderPane>

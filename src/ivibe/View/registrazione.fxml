@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane prefHeight="768.0" prefWidth="1024.0"
+            xmlns="http://javafx.com/javafx/25"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.RegistrazioneController"
+            style="-fx-background-color: linear-gradient(to right, #36105d, #7d0950);">
+
+    <children>
+
+        <VBox alignment="CENTER" spacing="15"
+              AnchorPane.topAnchor="0"
+              AnchorPane.bottomAnchor="0"
+              AnchorPane.leftAnchor="0"
+              AnchorPane.rightAnchor="0">
+
+            <VBox alignment="CENTER" spacing="12"
+                  maxWidth="420"
+                  style="-fx-background-color: rgba(0,0,0,0.85);
+                         -fx-background-radius: 20;
+                         -fx-padding: 30;">
+
+                <ImageView fitHeight="120" preserveRatio="true">
+                    <image>
+                        <Image url="@../resources/images/logo.png"/>
+                    </image>
+                </ImageView>
+
+                <Label text="Registrati"
+                       style="-fx-text-fill: white; -fx-font-size: 28;"/>
+
+                <Label fx:id="error_lbl"
+                       style="-fx-text-fill: #ff4d6d;"/>
+
+                <TextField fx:id="username_txt"
+                           promptText="Username"
+                           style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <TextField fx:id="email_txt"
+                           promptText="Email"
+                           style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <DatePicker fx:id="dataNascita_dt"
+                            promptText="Data di nascita"
+                            style="-fx-background-radius: 10;"/>
+
+                <PasswordField fx:id="password_psw"
+                               promptText="Password"
+                               style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <TextField fx:id="password_text"
+                           visible="false"
+                           managed="false"
+                           style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <PasswordField fx:id="confermaPassword_psw"
+                               promptText="Conferma Password"
+                               style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <TextField fx:id="conferma_text"
+                           visible="false"
+                           managed="false"
+                           style="-fx-background-radius: 10; -fx-padding: 10;"/>
+
+                <CheckBox fx:id="mostraPswd"
+                          text="Mostra Password"
+                          onAction="#gestisciMostraPassword"
+                          style="-fx-text-fill: white;"/>
+
+                <Button text="Registrati"
+                        onAction="#registrati"
+                        style="-fx-background-color: linear-gradient(to right, #36105d, #7d0950);
+                               -fx-text-fill: white;
+                               -fx-background-radius: 10;
+                               -fx-padding: 10 20;"/>
+
+                <Button text="Hai già un account? Accedi"
+                        onAction="#vaiLogin"
+                        style="-fx-background-color: transparent;
+                               -fx-text-fill: white;
+                               -fx-underline: true;"/>
+
+            </VBox>
+
+        </VBox>
+
+    </children>
+</AnchorPane>

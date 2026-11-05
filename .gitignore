@@ -1,0 +1,13 @@
+# NetBeans / build
+build/
+dist/
+nbproject/private/
+
+# File generati a runtime
+downloads/
+tools/
+db.properties
+
+# OS
+.DS_Store
+Thumbs.db

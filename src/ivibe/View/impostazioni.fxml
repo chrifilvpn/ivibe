@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane prefHeight="768.0" prefWidth="1024.0"
+            xmlns="http://javafx.com/javafx/25"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.ImpostazioniController"
+            style="-fx-background-color: linear-gradient(to bottom right, #36105d, #7d0950);">
+
+    <children>
+
+        <VBox alignment="CENTER"
+              spacing="16"
+              maxWidth="450"
+              AnchorPane.topAnchor="60"
+              AnchorPane.bottomAnchor="60"
+              AnchorPane.leftAnchor="60"
+              AnchorPane.rightAnchor="60"
+              style="-fx-background-color: rgba(0,0,0,0.85);
+                     -fx-background-radius: 20;
+                     -fx-padding: 25;">
+
+            <Label text="⚙ Impostazioni"
+                   style="-fx-text-fill: white;
+                          -fx-font-size: 26;
+                          -fx-font-weight: bold;"/>
+
+            <VBox spacing="8"
+                  style="-fx-background-color: rgba(30,41,59,0.6);
+                         -fx-background-radius: 15;
+                         -fx-padding: 15;"
+                  maxWidth="380">
+
+                <Label text="👤 Dati account"
+                       style="-fx-text-fill: white;
+                              -fx-font-size: 16;
+                              -fx-font-weight: bold;"/>
+
+                <Label fx:id="username_lbl" text="Username: -" style="-fx-text-fill: #ddd;"/>
+                <Label fx:id="email_lbl" text="Email: -" style="-fx-text-fill: #ddd;"/>
+                <Label fx:id="admin_lbl" text="Ruolo: -" style="-fx-text-fill: #ddd;"/>
+
+            </VBox>
+
+            <VBox spacing="10"
+                  style="-fx-background-color: rgba(30,41,59,0.6);
+                         -fx-background-radius: 15;
+                         -fx-padding: 15;"
+                  maxWidth="380">
+
+                <Label text="🔐 Modifica password"
+                       style="-fx-text-fill: white;
+                              -fx-font-size: 16;
+                              -fx-font-weight: bold;"/>
+
+                <PasswordField fx:id="oldPasswordField" promptText="Vecchia password"/>
+                <PasswordField fx:id="newPasswordField" promptText="Nuova password"/>
+
+                <TextField fx:id="visiblePasswordField"
+                           promptText="Nuova password (visibile)"
+                           visible="false"
+                           managed="false"/>
+
+                <CheckBox fx:id="showPasswordCheck"
+                          text="Mostra password"
+                          textFill="white"
+                          onAction="#togglePasswordVisibility"/>
+
+                <Button text="Aggiorna password"
+                        onAction="#updatePassword"
+                        style="-fx-background-color: #7c3aed;
+                               -fx-text-fill: white;
+                               -fx-background-radius: 10;"/>
+            </VBox>
+
+            <Label fx:id="statusLabel"
+                   text=""
+                   style="-fx-font-size: 14; -fx-font-weight: bold;"/>
+
+            <Button text="💥 Elimina account"
+                    onAction="#deleteAccount"
+                    style="-fx-background-color: #ef4444;
+                           -fx-text-fill: white;
+                           -fx-background-radius: 10;"/>
+
+            <Button text="🚪 Logout"
+                    onAction="#logout"
+                    style="-fx-background-color: #444;
+                           -fx-text-fill: white;
+                           -fx-background-radius: 10;"/>
+
+            <Button text="⬅ Indietro"
+                    onAction="#back"
+                    style="-fx-background-color: transparent;
+                           -fx-text-fill: white;
+                           -fx-underline: true;"/>
+
+        </VBox>
+
+    </children>
+</AnchorPane>

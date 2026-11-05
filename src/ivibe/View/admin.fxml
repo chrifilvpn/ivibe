@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/8"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.AdminController"
+            style="-fx-background-color: linear-gradient(to bottom right, #36105d, #7d0950);">
+
+    <left>
+        <StackPane style="-fx-background-color: rgba(0,0,0,0.85); -fx-padding: 20;" prefWidth="220">
+
+            <VBox spacing="20">
+
+                <Label text="iVibe Admin"
+                       style="-fx-text-fill: white; -fx-font-size: 22; -fx-font-weight: bold;"/>
+
+                <Button text="🎵 Canzoni"
+                        onAction="#mostraCanzoni"
+                        style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+                <Button text="👤 Utenti"
+                        onAction="#mostraUtenti"
+                        style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+                <Button text="⚙ Impostazioni"
+                        onAction="#apriImpostazioni"
+                        style="-fx-background-color: transparent; -fx-text-fill: white;"/>
+
+            </VBox>
+
+        </StackPane>
+    </left>
+
+    <center>
+        <StackPane style="-fx-padding: 20;">
+
+            <VBox fx:id="boxCanzoni" spacing="10">
+
+                <TextField fx:id="titoloField" promptText="Titolo"/>
+                <TextField fx:id="artistaField" promptText="Artista"/>
+                <TextField fx:id="durataField" promptText="Durata"/>
+                <TextField fx:id="urlField" promptText="URL"/>
+
+                <Label fx:id="errorLabel"/>
+
+                <Button text="➕ Aggiungi Canzone"
+                        onAction="#aggiungiCanzone"
+                        style="-fx-background-color: #22c55e; -fx-text-fill: white;"/>
+
+                <Button text="🗑 Rimuovi Canzone"
+                        onAction="#rimuoviCanzone"
+                        style="-fx-background-color: #ef4444; -fx-text-fill: white;"/>
+
+                <TableView fx:id="tableSongs" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="colTitolo" text="Titolo"/>
+                        <TableColumn fx:id="colArtista" text="Artista"/>
+                        <TableColumn fx:id="colId" text="ID"/>
+                    </columns>
+                </TableView>
+
+            </VBox>
+
+            <VBox fx:id="boxUtenti" visible="false" spacing="10">
+
+                <Label fx:id="errorLabelUtenti"/>
+
+                <Button text="⭐ Rendi Admin"
+                        onAction="#rendiAdmin"
+                        style="-fx-background-color: #f59e0b; -fx-text-fill: black;"/>
+
+                <Button text="⬇ Rimuovi Admin"
+                        onAction="#rimuoviAdmin"
+                        style="-fx-background-color: #f87171; -fx-text-fill: white;"/>
+
+                <Button text="🗑 Elimina Utente"
+                        onAction="#eliminaUtente"
+                        style="-fx-background-color: #ef4444; -fx-text-fill: white;"/>
+
+                <TableView fx:id="tableUsers" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="colUser" text="Username"/>
+                        <TableColumn fx:id="colMail" text="Email"/>
+                        <TableColumn fx:id="colUserId" text="ID"/>
+                        <TableColumn fx:id="colPermesso" text="Ruolo"/>
+                    </columns>
+                </TableView>
+
+            </VBox>
+
+        </StackPane>
+    </center>
+
+</BorderPane>

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane prefHeight="768.0" prefWidth="1024.0"
+            xmlns="http://javafx.com/javafx/25"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="ivibe.Control.LoginController"
+            style="-fx-background-color: linear-gradient(to bottom right, #36105d, #7d0950);">
+
+    <children>
+
+        <VBox alignment="CENTER"
+              spacing="15"
+              AnchorPane.topAnchor="0"
+              AnchorPane.bottomAnchor="0"
+              AnchorPane.leftAnchor="0"
+              AnchorPane.rightAnchor="0">
+
+            <VBox alignment="CENTER"
+                  spacing="12"
+                  maxWidth="400"
+                  style="-fx-background-color: rgba(0,0,0,0.85);
+                         -fx-background-radius: 20;
+                         -fx-padding: 30;">
+
+                <ImageView fx:id="logo_img"
+                           fitHeight="120"
+                           preserveRatio="true">
+                    <image>
+                        <Image url="@../resources/images/logo.png"/>
+                    </image>
+                </ImageView>
+
+                <Label text="Login"
+                       style="-fx-text-fill: white; -fx-font-size: 28;"/>
+
+                <Label fx:id="error_lbl"
+                       text=""
+                       style="-fx-text-fill: #ff4d6d;"/>
+
+                <Label text="Username o Email"
+                       style="-fx-text-fill: #cccccc;"/>
+
+                <TextField fx:id="nome_txt"
+                           promptText="Inserisci username o email"
+                           style="-fx-background-radius: 10;
+                                  -fx-padding: 10;"/>
+
+                <Label text="Password"
+                       style="-fx-text-fill: #cccccc;"/>
+
+                <PasswordField fx:id="pswd_field"
+                               promptText="Password"
+                               style="-fx-background-radius: 10;
+                                      -fx-padding: 10;"/>
+
+                <TextField fx:id="pswd_text"
+                           visible="false"
+                           managed="false"
+                           style="-fx-background-radius: 10;
+                                  -fx-padding: 10;"/>
+
+                <CheckBox fx:id="mostraPswd"
+                          onAction="#gestisciMostraPassword"
+                          text="Mostra Password"
+                          style="-fx-text-fill: white;"/>
+
+                <Button fx:id="accedi_btn"
+                        onAction="#accedi"
+                        text="Accedi"
+                        style="-fx-background-color: linear-gradient(to right, #36105d, #7d0950);
+                               -fx-text-fill: white;
+                               -fx-font-weight: bold;
+                               -fx-background-radius: 15;
+                               -fx-padding: 10 20;"/>
+
+                <Label text="Non hai un profilo?"
+                       style="-fx-text-fill: #aaaaaa;"/>
+
+                <Button fx:id="registrati_btn"
+                        onAction="#registrati"
+                        text="Registrati"
+                        style="-fx-background-color: transparent;
+                               -fx-border-color: white;
+                               -fx-text-fill: white;
+                               -fx-border-radius: 15;
+                               -fx-padding: 8 20;"/>
+
+            </VBox>
+
+        </VBox>
+
+    </children>
+</AnchorPane>
