@@ -349,11 +349,20 @@ function serviStatico(req, res, percorso) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Non trovato'); }
     const ext = path.extname(file);
-    res.writeHead(200, {
+    // "no-cache" = il browser può tenere il file ma deve chiedere ogni volta se è cambiato:
+    // così dopo un aggiornamento del sito non resta con CSS/JS vecchi
+    const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+    const intestazioni = {
       'Content-Type': TIPI[ext] || 'application/octet-stream',
-      'Content-Length': st.size,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
-    });
+      'Cache-Control': ['.png', '.ico'].includes(ext) ? 'public, max-age=86400' : 'no-cache',
+      ETag: etag,
+    };
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, intestazioni);
+      return res.end();
+    }
+    intestazioni['Content-Length'] = st.size;
+    res.writeHead(200, intestazioni);
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
   });
