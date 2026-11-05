@@ -11,3 +11,8 @@ nbproject/private/
 # OS
 .DS_Store
 Thumbs.db
+
+# Versione web
+web/node_modules/
+web/data/
+credenziali*.txt

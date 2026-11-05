@@ -1,0 +1,17 @@
+{
+  "name": "ivibe-web",
+  "version": "1.0.0",
+  "description": "iVibe - versione web: la tua musica, senza confini",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

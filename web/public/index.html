@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>iVibe</title>
+  <meta name="description" content="iVibe — la tua musica, senza confini.">
+  <meta name="theme-color" content="#140a24">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/logo-192.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <noscript>iVibe ha bisogno di JavaScript per funzionare.</noscript>
+
+  <!-- Schermata di accesso -->
+  <main id="auth" class="auth" hidden>
+    <div class="auth-card">
+      <div class="brand brand-big">
+        <img src="/logo-192.png" alt="" width="64" height="64">
+        <span class="brand-name">iVibe</span>
+      </div>
+      <p class="auth-tagline">La tua musica, senza confini.</p>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-auth-tab="login" aria-selected="true">Accedi</button>
+        <button class="tab" role="tab" data-auth-tab="registrazione" aria-selected="false">Registrati</button>
+      </div>
+
+      <form id="form-login" class="form" novalidate>
+        <label>Username o email
+          <input name="login" autocomplete="username" required>
+        </label>
+        <label>Password
+          <span class="pw">
+            <input name="password" type="password" autocomplete="current-password" required>
+            <button type="button" class="pw-toggle" aria-label="Mostra password">👁</button>
+          </span>
+        </label>
+        <p class="form-err" role="alert"></p>
+        <button class="btn btn-primary btn-block" type="submit">Accedi</button>
+      </form>
+
+      <form id="form-registrazione" class="form" novalidate hidden>
+        <label>Username
+          <input name="nickname" autocomplete="username" required minlength="3" maxlength="30">
+        </label>
+        <label>Email
+          <input name="email" type="email" autocomplete="email" required maxlength="100">
+        </label>
+        <label>Data di nascita
+          <input name="dataNascita" type="date" required>
+        </label>
+        <label>Password
+          <span class="pw">
+            <input name="password" type="password" autocomplete="new-password" required>
+            <button type="button" class="pw-toggle" aria-label="Mostra password">👁</button>
+          </span>
+          <small class="hint">Almeno 7 caratteri, con una maiuscola, un numero e un simbolo.</small>
+        </label>
+        <label>Conferma password
+          <input name="conferma" type="password" autocomplete="new-password" required>
+        </label>
+        <p class="form-err" role="alert"></p>
+        <button class="btn btn-primary btn-block" type="submit">Crea account</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#/home">
+        <img src="/logo-192.png" alt="" width="36" height="36">
+        <span class="brand-name">iVibe</span>
+      </a>
+      <nav class="nav">
+        <a href="#/home" data-nav="home"><span class="ico">⌂</span><span>Home</span></a>
+        <a href="#/preferiti" data-nav="preferiti"><span class="ico">♥</span><span>Preferiti</span></a>
+        <a href="#/playlist" data-nav="playlist"><span class="ico">≡</span><span>Playlist</span></a>
+        <a href="#/admin" data-nav="admin" id="nav-admin" hidden><span class="ico">★</span><span>Admin</span></a>
+        <a href="#/impostazioni" data-nav="impostazioni"><span class="ico">⚙</span><span>Impostazioni</span></a>
+      </nav>
+      <div class="sidebar-user">
+        <span class="avatar" id="avatar"></span>
+        <span class="who" id="who"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-logout">Esci</button>
+      </div>
+    </aside>
+
+    <main class="content" id="content" tabindex="-1"></main>
+  </div>
+
+  <!-- Video YouTube (le regole di YouTube chiedono che il player resti visibile) -->
+  <section id="video" class="video" hidden aria-label="Video">
+    <div class="video-frame"><div id="yt"></div></div>
+    <button class="btn-icon video-size" id="btn-video-size" title="Ingrandisci / riduci" aria-label="Ingrandisci o riduci il video">⤢</button>
+  </section>
+
+  <!-- Barra del lettore -->
+  <footer id="player" class="player" hidden>
+    <div class="np">
+      <img class="np-thumb" id="np-thumb" alt="" width="48" height="48">
+      <div class="np-text">
+        <div class="np-title" id="np-title">—</div>
+        <div class="np-artist" id="np-artist"></div>
+      </div>
+      <button class="btn-icon like" id="np-like" aria-label="Aggiungi ai preferiti">♡</button>
+    </div>
+    <div class="controls">
+      <div class="buttons">
+        <button class="btn-icon" id="btn-shuffle" title="Casuale" aria-label="Riproduzione casuale" aria-pressed="false">⤮</button>
+        <button class="btn-icon" id="btn-prev" title="Precedente" aria-label="Precedente">⏮</button>
+        <button class="btn-play" id="btn-play" title="Play / pausa" aria-label="Play">▶</button>
+        <button class="btn-icon" id="btn-next" title="Successiva" aria-label="Successiva">⏭</button>
+        <button class="btn-icon" id="btn-repeat" title="Ripeti" aria-label="Ripeti coda" aria-pressed="false">↻</button>
+      </div>
+      <div class="progress">
+        <span class="time" id="t-cur">0:00</span>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Posizione">
+        <span class="time" id="t-tot">0:00</span>
+      </div>
+    </div>
+    <div class="vol">
+      <span aria-hidden="true">🔊</span>
+      <input type="range" id="volume" min="0" max="100" value="70" aria-label="Volume">
+    </div>
+  </footer>
+
+  <dialog id="dialog" class="dialog">
+    <form method="dialog" class="dialog-body">
+      <h3 id="dialog-title"></h3>
+      <p id="dialog-text"></p>
+      <div id="dialog-fields"></div>
+      <p class="form-err" id="dialog-err" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" value="annulla" id="dialog-cancel">Annulla</button>
+        <button class="btn btn-primary" value="ok" id="dialog-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="menu" class="menu" hidden role="menu"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
