@@ -40,12 +40,13 @@
 
                 <TextField fx:id="titoloField" promptText="Titolo"/>
                 <TextField fx:id="artistaField" promptText="Artista"/>
-                <TextField fx:id="durataField" promptText="Durata"/>
-                <TextField fx:id="urlField" promptText="URL"/>
+                <TextField fx:id="durataField" promptText="Durata in minuti (es. 3.45)"/>
+                <TextField fx:id="urlField" promptText="URL YouTube (https://www.youtube.com/watch?v=...)"/>
 
                 <Label fx:id="errorLabel"/>
 
-                <Button text="➕ Aggiungi Canzone"
+                <Button fx:id="aggiungiBtn"
+                        text="➕ Aggiungi Canzone"
                         onAction="#aggiungiCanzone"
                         style="-fx-background-color: #22c55e; -fx-text-fill: white;"/>
 

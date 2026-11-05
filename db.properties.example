@@ -1,0 +1,8 @@
+# Copia questo file come "db.properties" (nella stessa cartella di build.xml)
+# e modifica i valori se il tuo MySQL è configurato diversamente.
+# Se db.properties non esiste, iVibe usa questi valori predefiniti.
+db.host=localhost
+db.port=3306
+db.name=ivibe
+db.user=root
+db.password=

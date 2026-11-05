@@ -1,0 +1,12 @@
+In questa cartella va il driver JDBC di MySQL:
+
+    mysql-connector-j-8.4.0.jar
+
+Scaricalo da https://dev.mysql.com/downloads/connector/j/
+(scegli "Platform Independent", apri lo zip e copia qui il file .jar),
+oppure direttamente da Maven Central:
+https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
+
+Il progetto NetBeans lo cerca già con questo nome esatto (nbproject/project.properties).
+Se usi un'altra versione, in NetBeans: tasto destro sul progetto > Properties >
+Libraries > Add JAR/Folder, e togli quello mancante.

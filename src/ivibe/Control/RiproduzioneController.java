@@ -1,91 +1,112 @@
 package ivibe.Control;
 
 import ivibe.Model.Canzone;
-import ivibe.Model.Utente;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
+import javafx.stage.Stage;
+import javafx.util.Duration;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
-import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class RiproduzioneController implements Initializable {
 
-    private List<String> codaUrl = new ArrayList<>();
-    private int indiceCoda = 0;
+    private static final Pattern PERCENTUALE = Pattern.compile("(\\d+(?:\\.\\d+)?)%");
+
     @FXML
     private MediaView mediaView;
     @FXML
     private Label titolo_lbl;
     @FXML
+    private Label stato_lbl;
+    @FXML
+    private Label tempo_lbl;
+    @FXML
     private Slider progressSlider;
     @FXML
     private Slider volumeSlider;
+    @FXML
+    private Button prev_btn;
+    @FXML
+    private Button next_btn;
 
     private MediaPlayer mediaPlayer;
 
-    private volatile boolean stopDownload = false;
+    private final List<Canzone> coda = new ArrayList<>();
+    private int indiceCoda = 0;
+
+    /**
+     * Ogni nuova canzone incrementa questo numero: un download vecchio
+     * che finisce dopo vede che il numero è cambiato e non fa niente.
+     * (prima si usava un solo flag boolean e due download potevano accavallarsi)
+     */
+    private volatile int generazione = 0;
     private volatile Process downloadProcess = null;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
         volumeSlider.setValue(50);
-
         volumeSlider.valueProperty().addListener((obs, oldV, newV) -> {
             if (mediaPlayer != null) {
                 mediaPlayer.setVolume(newV.doubleValue() / 100.0);
             }
         });
 
-        progressSlider.setOnMousePressed(e -> seek());
-        progressSlider.setOnMouseDragged(e -> seek());
+        progressSlider.setMin(0);
+        progressSlider.setMax(100);
+        // il seek avviene quando l'utente rilascia (o clicca) lo slider
+        progressSlider.setOnMouseReleased(e -> seek());
+        progressSlider.valueChangingProperty().addListener((obs, eraInCambio, inCambio) -> {
+            if (!inCambio) {
+                seek();
+            }
+        });
 
         Platform.runLater(() -> {
-            mediaView.getScene().getWindow().setOnHidden(e -> {
-                stopAndDispose();
-                stopDownload();
-            });
+            if (mediaView.getScene() != null && mediaView.getScene().getWindow() != null) {
+                mediaView.getScene().getWindow().setOnHidden(e -> chiudi());
+            }
         });
+
+        aggiornaPulsanti();
     }
 
-    public void startDownload(String url, List<Canzone> coda) {
+    /**
+     * Riproduce la canzone scelta. La coda (es. la playlist o la lista
+     * visualizzata) serve per passare alla canzone successiva in automatico.
+     */
+    public void riproduci(Canzone canzone, List<Canzone> nuovaCoda) {
 
-        codaUrl.clear();
-        indiceCoda = 0;
-
-        if (coda != null) {
-            for (Canzone c : coda) {
+        coda.clear();
+        if (nuovaCoda != null) {
+            for (Canzone c : nuovaCoda) {
                 if (c != null && c.getUrl() != null) {
-                    codaUrl.add(c.getUrl());
-                }
-            }
-            for (int i = 0; i < codaUrl.size(); i++) {
-                if (codaUrl.get(i).equals(url)) {
-                    indiceCoda = i;
-                    break;
+                    coda.add(c);
                 }
             }
         }
 
-        scaricaERiproduci(url);
-    }
+        if (!coda.contains(canzone)) {
+            coda.add(0, canzone);
+        }
+        indiceCoda = coda.indexOf(canzone);
 
-    public void startDownload(String url) {
-        startDownload(url, null);
+        avvia(canzone);
     }
 
     @FXML
@@ -110,19 +131,52 @@ public class RiproduzioneController implements Initializable {
         }
     }
 
+    @FXML
+    public void successiva() {
+        if (indiceCoda + 1 < coda.size()) {
+            indiceCoda++;
+            avvia(coda.get(indiceCoda));
+        }
+    }
+
+    @FXML
+    public void precedente() {
+        // se la canzone è avanti di più di 3 secondi, ricomincia da capo
+        if (mediaPlayer != null && mediaPlayer.getCurrentTime().toSeconds() > 3) {
+            mediaPlayer.seek(Duration.ZERO);
+            return;
+        }
+        if (indiceCoda > 0) {
+            indiceCoda--;
+            avvia(coda.get(indiceCoda));
+        }
+    }
+
+    private void aggiornaPulsanti() {
+        if (next_btn != null) {
+            next_btn.setDisable(indiceCoda + 1 >= coda.size());
+        }
+    }
+
     private void seek() {
         if (mediaPlayer == null) {
             return;
         }
-
-        double pos = progressSlider.getValue() / 100.0;
-
-        mediaPlayer.seek(
-                mediaPlayer.getTotalDuration().multiply(pos)
-        );
+        Duration totale = mediaPlayer.getTotalDuration();
+        if (totale == null || totale.isUnknown() || totale.isIndefinite()) {
+            return;
+        }
+        mediaPlayer.seek(totale.multiply(progressSlider.getValue() / 100.0));
     }
 
-    private void stopAndDispose() {
+    /** Ferma tutto: chiamato quando la finestra viene chiusa. */
+    public void chiudi() {
+        generazione++;
+        fermaDownload();
+        fermaPlayer();
+    }
+
+    private void fermaPlayer() {
         if (mediaPlayer != null) {
             mediaPlayer.stop();
             mediaPlayer.dispose();
@@ -130,148 +184,187 @@ public class RiproduzioneController implements Initializable {
         }
     }
 
-    public void stopDownload() {
-
-        stopDownload = true;
-
-        if (downloadProcess != null) {
-            downloadProcess.destroyForcibly();
+    private void fermaDownload() {
+        Process p = downloadProcess;
+        if (p != null) {
+            p.destroyForcibly();
             downloadProcess = null;
         }
     }
 
-    private void scaricaERiproduci(String url) {
+    private void stato(String testo) {
+        if (stato_lbl != null) {
+            stato_lbl.setText(testo);
+        }
+    }
 
-        stopDownload = true;
-        if (downloadProcess != null) {
-            downloadProcess.destroyForcibly();
-            downloadProcess = null;
+    /** Ogni canzone ha il suo file: se è già stata scaricata parte subito. */
+    private File fileCanzone(Canzone c) {
+        return new File("downloads", "canzone_" + c.getN() + ".mp4");
+    }
+
+    private void avvia(Canzone canzone) {
+
+        final int mia = ++generazione;
+
+        fermaDownload();
+        fermaPlayer();
+
+        titolo_lbl.setText("🎵 " + canzone.getTitolo() + " — " + canzone.getArtista());
+        if (titolo_lbl.getScene() != null && titolo_lbl.getScene().getWindow() instanceof Stage) {
+            ((Stage) titolo_lbl.getScene().getWindow()).setTitle(canzone.getTitolo());
+        }
+        progressSlider.setValue(0);
+        if (tempo_lbl != null) {
+            tempo_lbl.setText("0:00 / 0:00");
+        }
+        aggiornaPulsanti();
+
+        final File file = fileCanzone(canzone);
+
+        if (file.exists() && file.length() > 0) {
+            avviaPlayer(file, mia);
+            return;
         }
 
-        Platform.runLater(() -> stopAndDispose());
+        stato("Preparazione download...");
 
-        final String nomeFile = "downloads/canzone.mp4";
-
-        new Thread(() -> {
-
+        Thread t = new Thread(() -> {
             try {
-                Thread.sleep(300);
-
-                stopDownload = false;
-
-                Platform.runLater(() -> titolo_lbl.setText("Download in corso..."));
-
-                InputStream inputStream = getClass().getResourceAsStream(
-                        "/ivibe/resources/tools/yt-dlp.exe"
-                );
-
-                if (inputStream == null) {
-                    Platform.runLater(() -> titolo_lbl.setText("yt-dlp non trovato"));
+                YtDlp.attendiAggiornamento();
+                if (mia != generazione) {
                     return;
                 }
 
-                Path tempExe = Files.createTempFile("yt-dlp-", ".exe");
-                Files.copy(inputStream, tempExe, StandardCopyOption.REPLACE_EXISTING);
-                tempExe.toFile().deleteOnExit();
+                file.getParentFile().mkdirs();
 
                 ProcessBuilder pb = new ProcessBuilder(
-                        tempExe.toString(),
-                        "-f", "best[ext=mp4]",
-                        "-o", nomeFile,
+                        YtDlp.getEseguibile(),
+                        // JavaFX riproduce solo MP4 (H.264 + AAC): il formato 18 c'è quasi sempre
+                        "-f", "best[ext=mp4][vcodec!=none][acodec!=none]/18",
+                        "-o", file.getPath(),
+                        "--no-playlist",
                         "--newline",
                         "--force-overwrites",
-                        url
+                        canzone.getUrl()
                 );
+                pb.redirectErrorStream(true); // altrimenti stderr pieno può bloccare il processo
 
-                downloadProcess = pb.start();
-                Scanner scanner = new Scanner(downloadProcess.getInputStream());
+                Process p = pb.start();
+                downloadProcess = p;
 
-                while (scanner.hasNextLine()) {
-                    if (stopDownload) {
-                        if (downloadProcess != null) {
-                            downloadProcess.destroyForcibly();
+                StringBuilder ultimaRiga = new StringBuilder();
+
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        if (mia != generazione) {
+                            p.destroyForcibly();
+                            return;
                         }
-                        return;
-                    }
-                    String line = scanner.nextLine();
-                    if (line.contains("%")) {
-                        try {
-                            String percent = line.replaceAll(".*?(\\d+\\.\\d+)%.*", "$1");
-                            double progress = Double.parseDouble(percent) / 100.0;
-                            Platform.runLater(() -> titolo_lbl.setText("Download: " + (int) (progress * 100) + "%"));
-                        } catch (Exception ignored) {
+                        if (line.contains("ERROR")) {
+                            ultimaRiga.setLength(0);
+                            ultimaRiga.append(line);
+                        }
+                        Matcher m = PERCENTUALE.matcher(line);
+                        if (line.contains("[download]") && m.find()) {
+                            final String perc = m.group(1);
+                            Platform.runLater(() -> {
+                                if (mia == generazione) {
+                                    stato("Download: " + (int) Double.parseDouble(perc) + "%");
+                                }
+                            });
                         }
                     }
                 }
 
-                if (downloadProcess != null && !stopDownload) {
-                    downloadProcess.waitFor();
-                }
+                int codice = p.waitFor();
+                downloadProcess = null;
 
-                if (stopDownload) {
+                if (mia != generazione) {
                     return;
                 }
 
-                Platform.runLater(() -> {
+                if (codice != 0 || !file.exists()) {
+                    String errore = ultimaRiga.length() > 0 ? ultimaRiga.toString() : "codice " + codice;
+                    System.out.println("yt-dlp: " + errore);
+                    Platform.runLater(() -> stato("❌ Download non riuscito (" + errore + ")"));
+                    return;
+                }
 
-                    titolo_lbl.setText("Riproduzione...");
+                Platform.runLater(() -> avviaPlayer(file, mia));
 
-                    File file = new File(nomeFile);
-                    if (!file.exists()) {
-                        titolo_lbl.setText("File non trovato");
-                        return;
-                    }
-
-                    Media media = new Media(file.toURI().toString());
-                    mediaPlayer = new MediaPlayer(media);
-                    mediaView.setMediaPlayer(mediaPlayer);
-
-                    progressSlider.setMin(0);
-                    progressSlider.setMax(100);
-
-                    mediaPlayer.setOnReady(() -> {
-                        mediaPlayer.currentTimeProperty().addListener((obs, oldTime, newTime) -> {
-
-                            if (mediaPlayer == null) {
-                                return;
-                            }
-                            if (progressSlider.isValueChanging()) {
-                                return;
-                            }
-
-                            javafx.util.Duration total = mediaPlayer.getTotalDuration();
-                            if (total == null || total.isUnknown() || total.isIndefinite()) {
-                                return;
-                            }
-
-                            double totalMs = total.toMillis();
-                            if (totalMs <= 0) {
-                                return;
-                            }
-
-                            double progress = (newTime.toMillis() / totalMs) * 100.0;
-                            progressSlider.setValue(progress);
-                        });
-                    });
-
-                    mediaPlayer.setOnEndOfMedia(() -> {
-                        indiceCoda++;
-                        if (indiceCoda < codaUrl.size()) {
-                            scaricaERiproduci(codaUrl.get(indiceCoda));
-                        } else {
-                            titolo_lbl.setText("Playlist terminata");
-                            progressSlider.setValue(0);
-                        }
-                    });
-
-                    mediaPlayer.setVolume(volumeSlider.getValue() / 100.0);
-                    mediaPlayer.play();
-                });
-
+            } catch (java.io.IOException e) {
+                e.printStackTrace();
+                Platform.runLater(() -> stato(YtDlp.isWindows()
+                        ? "❌ Impossibile avviare yt-dlp"
+                        : "❌ yt-dlp non trovato: installalo con 'sudo apt install yt-dlp'"));
             } catch (Exception e) {
                 e.printStackTrace();
+                Platform.runLater(() -> stato("❌ Errore: " + e.getMessage()));
             }
+        });
+        t.setDaemon(true);
+        t.start();
+    }
 
-        }).start();
+    private void avviaPlayer(File file, int mia) {
+
+        if (mia != generazione) {
+            return;
+        }
+
+        try {
+            Media media = new Media(file.toURI().toString());
+            MediaPlayer player = new MediaPlayer(media);
+            mediaPlayer = player;
+            mediaView.setMediaPlayer(player);
+
+            player.currentTimeProperty().addListener((obs, oldTime, newTime) -> {
+                Duration total = player.getTotalDuration();
+                if (total == null || total.isUnknown() || total.isIndefinite() || total.toMillis() <= 0) {
+                    return;
+                }
+                if (!progressSlider.isValueChanging() && !progressSlider.isPressed()) {
+                    progressSlider.setValue(newTime.toMillis() / total.toMillis() * 100.0);
+                }
+                if (tempo_lbl != null) {
+                    tempo_lbl.setText(formatta(newTime) + " / " + formatta(total));
+                }
+            });
+
+            player.setOnError(() -> {
+                stato("❌ Impossibile riprodurre il file");
+                // file probabilmente rovinato: lo cancelliamo così la prossima volta si riscarica
+                if (mediaPlayer == player) {
+                    mediaPlayer = null;
+                }
+                player.dispose();
+                file.delete();
+            });
+
+            player.setOnEndOfMedia(() -> {
+                if (indiceCoda + 1 < coda.size()) {
+                    successiva();
+                } else {
+                    stato("Fine della coda");
+                    progressSlider.setValue(0);
+                }
+            });
+
+            player.setVolume(volumeSlider.getValue() / 100.0);
+            player.play();
+            stato("In riproduzione" + (coda.size() > 1 ? "  (" + (indiceCoda + 1) + "/" + coda.size() + ")" : ""));
+            aggiornaPulsanti();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            stato("❌ Impossibile riprodurre il file");
+        }
+    }
+
+    private static String formatta(Duration d) {
+        int sec = (int) Math.floor(d.toSeconds());
+        return (sec / 60) + ":" + String.format("%02d", sec % 60);
     }
 }

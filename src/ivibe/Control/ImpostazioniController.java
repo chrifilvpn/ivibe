@@ -1,22 +1,18 @@
 package ivibe.Control;
 
+import ivibe.Database.Database;
+import ivibe.Database.UtenteDAO;
 import ivibe.Model.PasswordEncoder;
 import ivibe.Model.Sessione;
 import ivibe.Model.Utente;
+import ivibe.Model.Validatore;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
-import javafx.scene.image.Image;
 
-import java.io.*;
 import java.net.URL;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.sql.SQLException;
 import java.util.ResourceBundle;
 
 public class ImpostazioniController implements Initializable {
@@ -34,10 +30,16 @@ public class ImpostazioniController implements Initializable {
 
     @FXML private Label statusLabel;
 
+    /** Finestra principale (utente o admin) da chiudere in caso di logout. */
     private Stage homeStage;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
+
+        statusLabel.setText("");
+
+        // campo visibile e campo nascosto condividono lo stesso testo
+        visiblePasswordField.textProperty().bindBidirectional(newPasswordField.textProperty());
 
         utenteCorrente = Sessione.getUtenteCorrente();
 
@@ -48,18 +50,11 @@ public class ImpostazioniController implements Initializable {
 
         username_lbl.setText("Username: " + utenteCorrente.getNickname());
         email_lbl.setText("Email: " + utenteCorrente.getEmail());
-
-        if (utenteCorrente.isAdmin()) {
-            admin_lbl.setText("Ruolo: ADMIN");
-        } else {
-            admin_lbl.setText("Ruolo: USER");
-        }
+        admin_lbl.setText(utenteCorrente.isAdmin() ? "Ruolo: ADMIN" : "Ruolo: USER");
 
         username_lbl.setStyle("-fx-text-fill: white;");
         email_lbl.setStyle("-fx-text-fill: white;");
         admin_lbl.setStyle("-fx-text-fill: #ffd166;");
-
-        statusLabel.setText("");
     }
 
     @FXML
@@ -67,89 +62,53 @@ public class ImpostazioniController implements Initializable {
 
         boolean show = showPasswordCheck.isSelected();
 
-        if (show) {
-            visiblePasswordField.setText(newPasswordField.getText());
-            visiblePasswordField.setVisible(true);
-            visiblePasswordField.setManaged(true);
+        visiblePasswordField.setVisible(show);
+        visiblePasswordField.setManaged(show);
 
-            newPasswordField.setVisible(false);
-            newPasswordField.setManaged(false);
-        } else {
-            newPasswordField.setText(visiblePasswordField.getText());
-            newPasswordField.setVisible(true);
-            newPasswordField.setManaged(true);
-
-            visiblePasswordField.setVisible(false);
-            visiblePasswordField.setManaged(false);
-        }
+        newPasswordField.setVisible(!show);
+        newPasswordField.setManaged(!show);
     }
 
     @FXML
     public void updatePassword() {
 
-        String oldP = oldPasswordField.getText();
-
-        String newP;
-        if (showPasswordCheck.isSelected()) {
-            newP = visiblePasswordField.getText();
-        } else {
-            newP = newPasswordField.getText();
+        if (utenteCorrente == null) {
+            return;
         }
+
+        String oldP = oldPasswordField.getText() == null ? "" : oldPasswordField.getText();
+        String newP = newPasswordField.getText() == null ? "" : newPasswordField.getText();
 
         if (oldP.isEmpty() || newP.isEmpty()) {
             mostraErrore("Compila tutti i campi");
-            return;
-        }
-        if (newP.contains(",") || newP.contains("|") || newP.contains("\\") || newP.contains("/")) {
-            mostraErrore("⚠ La nuova password contiene caratteri non validi(, | \\ /)");
-            return;
-        }
-        if (newP.length() < 7) {
-            mostraErrore("⚠ Password troppo corta");
             return;
         }
         if (!PasswordEncoder.verify(oldP, utenteCorrente.getPswd())) {
             mostraErrore("Password attuale errata");
             return;
         }
+        if (oldP.equals(newP)) {
+            mostraErrore("La nuova password è uguale a quella attuale");
+            return;
+        }
+
+        String msg = Validatore.controllaPassword(newP);
+        if (msg != null) {
+            mostraErrore(msg);
+            return;
+        }
 
         String encoded = PasswordEncoder.encode(newP);
-        utenteCorrente.setPswd(encoded);
 
-        List<Utente> utentiAgg = leggiUtenti();
-
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter("Files/utenti.csv"))) {
-
-            bw.write("id,nickname,pswd,email,data,isAdmin\n");
-
-            for (Utente user : utentiAgg) {
-
-                if (user.getId() == utenteCorrente.getId()) {
-                    user.setPswd(encoded);
-                }
-
-                String data;
-                if (user.getData() != null) {
-                    data = user.getData().toString();
-                } else {
-                    data = "2000-01-01";
-                }
-
-                bw.write(
-                    user.getId() + "," +
-                    user.getNickname() + "," +
-                    user.getPswd() + "," +
-                    user.getEmail() + "," +
-                    data + "," +
-                    user.isAdmin() + "\n"
-                );
-            }
-
-        } catch (Exception e) {
+        try {
+            UtenteDAO.aggiornaPassword(utenteCorrente.getId(), encoded);
+        } catch (SQLException e) {
+            mostraErrore(Database.messaggioErrore(e));
             e.printStackTrace();
             return;
         }
 
+        utenteCorrente.setPswd(encoded);
         mostraSuccesso("Password aggiornata!");
         pulisciCampi();
     }
@@ -157,43 +116,25 @@ public class ImpostazioniController implements Initializable {
     @FXML
     public void deleteAccount() {
 
-        if (utenteCorrente == null) return;
-
-        int userId = utenteCorrente.getId();
-
-        List<Utente> utenti = leggiUtenti();
-        List<Utente> output = new ArrayList<>();
-
-        for (Utente user : utenti) {
-            if (user.getId() != userId) {
-                output.add(user);
-            }
+        if (utenteCorrente == null) {
+            return;
         }
 
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter("Files/utenti.csv"))) {
-
-            bw.write("id,nickname,pswd,email,data,isAdmin\n");
-
-            for (Utente user : output) {
-
-                String data;
-                if (user.getData() != null) {
-                    data = user.getData().toString();
-                } else {
-                    data = "2000-01-01";
-                }
-
-                bw.write(
-                        user.getId() + "," +
-                        user.getNickname() + "," +
-                        user.getPswd() + "," +
-                        user.getEmail() + "," +
-                        data + "," +
-                        user.isAdmin() + "\n"
-                );
+        try {
+            if (utenteCorrente.isAdmin() && UtenteDAO.contaAdmin() <= 1) {
+                mostraErrore("Sei l'unico admin: non puoi eliminare l'account");
+                return;
             }
 
-        } catch (Exception e) {
+            if (!Finestre.conferma("Vuoi davvero eliminare il tuo account?\n"
+                    + "Preferiti e playlist verranno cancellati definitivamente.")) {
+                return;
+            }
+
+            UtenteDAO.elimina(utenteCorrente.getId());
+
+        } catch (SQLException e) {
+            mostraErrore(Database.messaggioErrore(e));
             e.printStackTrace();
             return;
         }
@@ -220,93 +161,23 @@ public class ImpostazioniController implements Initializable {
     private void pulisciCampi() {
         oldPasswordField.clear();
         newPasswordField.clear();
-        visiblePasswordField.clear();
     }
 
     @FXML
     public void logout() {
-        try {
-            Sessione.setUtenteCorrente(null);
 
-            Stage current = (Stage) username_lbl.getScene().getWindow();
-            current.close();
+        Sessione.logout();
+        UtenteController.chiudiPlayer();
 
-            if (homeStage != null) {
-                homeStage.close();
-            }
-
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/ivibe/View/Login.fxml"));
-            Parent root = loader.load();
-
-            Stage loginStage = new Stage();
-            loginStage.setScene(new Scene(root));
-            loginStage.setTitle("Login");
-            loginStage.setMaximized(true);
-
-            Image icon = new Image(getClass().getResourceAsStream("/ivibe/resources/images/LogoNS.png"));
-            loginStage.getIcons().add(icon);
-
-            loginStage.show();
-
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (homeStage != null) {
+            homeStage.close();
         }
+
+        Stage current = (Stage) username_lbl.getScene().getWindow();
+        Finestre.sostituisci(current, Finestre.LOGIN, "Login");
     }
 
     public void setHomeStage(Stage stage) {
         this.homeStage = stage;
-    }
-
-    private List<Utente> leggiUtenti() {
-
-        List<Utente> list = new ArrayList<>();
-        File file = new File("Files/utenti.csv");
-
-        if (!file.exists()) return list;
-
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-            String line;
-            boolean first = true;
-
-            while ((line = br.readLine()) != null) {
-
-                if (first) { first = false; continue; }
-                if (line.trim().isEmpty()) continue;
-
-                String[] p = line.replace("\"", "").split(",");
-
-                if (p.length < 6) continue;
-
-                LocalDate data;
-
-                try {
-                    String raw = p[4].trim();
-
-                    if (raw.equalsIgnoreCase("null") || raw.isEmpty()) {
-                        data = LocalDate.of(2000, 1, 1);
-                    } else {
-                        data = LocalDate.parse(raw);
-                    }
-
-                } catch (Exception e) {
-                    data = LocalDate.of(2000, 1, 1);
-                }
-
-                list.add(new Utente(
-                        Integer.parseInt(p[0].trim()),
-                        p[1].trim(),
-                        p[3].trim(),
-                        p[2].trim(),
-                        data,
-                        Boolean.parseBoolean(p[5].trim())
-                ));
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return list;
     }
 }

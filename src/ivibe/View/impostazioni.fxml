@@ -4,7 +4,7 @@
 <?import javafx.scene.layout.*?>
 
 <AnchorPane prefHeight="768.0" prefWidth="1024.0"
-            xmlns="http://javafx.com/javafx/25"
+            xmlns="http://javafx.com/javafx/8"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="ivibe.Control.ImpostazioniController"
             style="-fx-background-color: linear-gradient(to bottom right, #36105d, #7d0950);">

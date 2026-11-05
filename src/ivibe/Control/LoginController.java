@@ -1,20 +1,16 @@
 package ivibe.Control;
 
-import ivibe.Model.Sessione;
+import ivibe.Database.Database;
+import ivibe.Database.UtenteDAO;
 import ivibe.Model.PasswordEncoder;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import ivibe.Model.Sessione;
+import ivibe.Model.Utente;
 import java.net.URL;
+import java.sql.SQLException;
 import java.util.ResourceBundle;
-import ivibe.Model.*;
 import javafx.fxml.FXML;
-import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 public class LoginController implements Initializable {
@@ -29,17 +25,19 @@ public class LoginController implements Initializable {
     private PasswordField pswd_field;
     @FXML
     private CheckBox mostraPswd;
-    private Utente utenteCorrente = Sessione.getUtenteCorrente();
+
     @Override
     public void initialize(URL url, ResourceBundle rb) {
 
         pswd_text.setVisible(false);
         pswd_text.setManaged(false);
 
+        // i due campi condividono lo stesso testo: basta leggere uno dei due
         pswd_text.textProperty().bindBidirectional(pswd_field.textProperty());
 
         error_lbl.setText("");
     }
+
     @FXML
     public void gestisciMostraPassword() {
 
@@ -55,15 +53,8 @@ public class LoginController implements Initializable {
     @FXML
     public void accedi() {
 
-        String input = nome_txt.getText().trim();
-
-        String pswd;
-
-        if (pswd_field.isVisible()) {
-            pswd = pswd_field.getText();
-        } else {
-            pswd = pswd_text.getText();
-        }
+        String input = nome_txt.getText() == null ? "" : nome_txt.getText().trim();
+        String pswd = pswd_field.getText() == null ? "" : pswd_field.getText();
 
         error_lbl.setText("");
 
@@ -72,127 +63,41 @@ public class LoginController implements Initializable {
             return;
         }
 
-        try (BufferedReader br = new BufferedReader(new FileReader("Files/utenti.csv"))) {
+        try {
+            Utente utente = UtenteDAO.trovaPerNicknameOEmail(input);
 
-            String linea;
-            br.readLine(); 
-
-            while ((linea = br.readLine()) != null) {
-
-                if (linea == null || linea.trim().isEmpty()) {
-                    continue;
-                }
-
-                linea = linea.replace("\"", "").trim();
-
-                String[] dati = linea.split(",");
-
-                if (dati.length < 6) {
-                    continue;
-                }
-
-                int id;
-
-                try {
-                    id = Integer.parseInt(dati[0].trim());
-                } catch (NumberFormatException ex) {
-                    System.out.println("ID non valido: " + dati[0]);
-                    continue;
-                }
-
-                String username = dati[1].trim();
-                String password = dati[2].trim();
-                String email = dati[3].trim();
-
-                boolean isAdmin = Boolean.parseBoolean(dati[5].trim());
-
-                boolean matchUser = username.equals(input) || email.equals(input);
-                boolean matchPass = PasswordEncoder.verify(pswd, password);
-
-                if (matchUser && matchPass) {
-
-                    Utente utente = new Utente(
-                            id,
-                            username,
-                            email,
-                            password,
-                            null,
-                            isAdmin
-                    );
-
-                    Sessione.setUtenteCorrente(utente);
-
-                    System.out.println("Login riuscito: " + username);
-
-                    if (isAdmin) {
-                        finestraAdmin();
-                    } else {
-                        finestraUtente();
-                    }
-
-                    return;
-                }
+            if (utente == null || !PasswordEncoder.verify(pswd, utente.getPswd())) {
+                error_lbl.setText("Credenziali errate");
+                return;
             }
 
-            error_lbl.setText("Credenziali errate");
+            // le vecchie password in Base64 vengono convertite nel nuovo formato sicuro
+            if (PasswordEncoder.isFormatoVecchio(utente.getPswd())) {
+                String nuova = PasswordEncoder.encode(pswd);
+                UtenteDAO.aggiornaPassword(utente.getId(), nuova);
+                utente.setPswd(nuova);
+            }
 
-        } catch (IOException e) {
-            error_lbl.setText("Errore lettura utenti.csv");
-            e.printStackTrace();
-        }
-    }
-
-    public void finestraUtente() {
-        apriFinestra("/ivibe/View/utente.fxml", "Utente");
-    }
-    public void setUtenteCorrente(Utente u) {
-        this.utenteCorrente = u;
-    }
-   public void finestraAdmin() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/ivibe/View/admin.fxml"));
-            Parent root = loader.load();
-
-            Stage stage = new Stage();
-            stage.setTitle("Admin");
-            stage.setScene(new Scene(root));
-            stage.setMaximized(true);
-            Image icon = new Image(getClass().getResourceAsStream("/ivibe/resources/images/LogoNS.png"));
-            stage.getIcons().add(icon);
-            stage.show();
+            Sessione.setUtenteCorrente(utente);
+            System.out.println("Login riuscito: " + utente.getNickname());
 
             Stage current = (Stage) nome_txt.getScene().getWindow();
-            current.close();
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+            if (utente.isAdmin()) {
+                Finestre.sostituisci(current, Finestre.ADMIN, "Admin");
+            } else {
+                Finestre.sostituisci(current, Finestre.UTENTE, "iVibe");
+            }
 
-    private void apriFinestra(String path, String titolo) {
-
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource(path));
-            Parent root = loader.load();
-
-            Stage stage = new Stage();
-            stage.setTitle(titolo);
-            stage.setScene(new Scene(root));
-            stage.setMaximized(true);
-            Image icon = new Image(getClass().getResourceAsStream("/ivibe/resources/images/LogoNS.png"));
-            stage.getIcons().add(icon);
-            stage.show();
-
-            Stage current = (Stage) nome_txt.getScene().getWindow();
-            current.close();
-
-        } catch (IOException e) {
+        } catch (SQLException e) {
+            error_lbl.setText(Database.messaggioErrore(e));
             e.printStackTrace();
         }
     }
 
     @FXML
     public void registrati() {
-        apriFinestra("/ivibe/View/registrazione.fxml", "Registrazione");
+        Stage current = (Stage) nome_txt.getScene().getWindow();
+        Finestre.sostituisci(current, Finestre.REGISTRAZIONE, "Registrazione");
     }
 }

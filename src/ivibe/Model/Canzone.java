@@ -82,4 +82,26 @@ public class Canzone {
     public IntegerProperty nProperty() {
         return n;
     }
+
+    /** Due canzoni sono uguali se hanno lo stesso id. */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Canzone)) {
+            return false;
+        }
+        return getN() == ((Canzone) o).getN();
+    }
+
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(getN());
+    }
+
+    @Override
+    public String toString() {
+        return getTitolo() + " - " + getArtista();
+    }
 }

@@ -8,8 +8,14 @@ import java.util.List;
 
 public class Playlist {
 
+    private int id;
     private StringProperty nome;
     private List<Canzone> canzoni;
+
+    public Playlist(int id, String nome) {
+        this(nome);
+        this.id = id;
+    }
 
     public Playlist(String nome) {
 
@@ -32,6 +38,15 @@ public class Playlist {
                 }
             }
         }
+    }
+
+    /** Id della playlist nel database (0 se non ancora salvata). */
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public StringProperty nomeProperty() {

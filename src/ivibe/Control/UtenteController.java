@@ -1,23 +1,24 @@
 package ivibe.Control;
 
+import ivibe.Database.CanzoneDAO;
+import ivibe.Database.Database;
+import ivibe.Database.PlaylistDAO;
+import ivibe.Database.PreferitiDAO;
 import ivibe.Model.Canzone;
 import ivibe.Model.Playlist;
-import ivibe.Model.Utente;
 import ivibe.Model.Sessione;
+import ivibe.Model.Utente;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.fxml.*;
 import javafx.scene.control.*;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
-import javafx.stage.Stage;
-
-import java.net.URL;
-import java.util.*;
-import java.io.*;
-import javafx.scene.image.Image;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+
+import java.net.URL;
+import java.sql.SQLException;
+import java.util.*;
 
 public class UtenteController implements Initializable {
 
@@ -33,6 +34,8 @@ public class UtenteController implements Initializable {
     private VBox listaPlaylistBox;
     @FXML
     private Label titoloPlaylistLabel;
+    @FXML
+    private Label sezioneLabel;
     @FXML
     private TableView<Canzone> tableSongs;
     @FXML
@@ -50,23 +53,27 @@ public class UtenteController implements Initializable {
     private Label nowPlayingLabel;
     @FXML
     private VBox playlistSection;
-
-
-    @FXML
-    private FlowPane dettaglioContainer;
-    private List<Canzone> lista = new ArrayList<Canzone>();
-    private List<Canzone> preferiti = new ArrayList<Canzone>();
-    private List<String> playlistRighe = new ArrayList<>();
-    private Utente u;
-    private List<Canzone> vistaCorrente = new ArrayList<Canzone>();
-    private Playlist playlistSelezionata = null;
     @FXML
     private TextField playlistNameField;
-
     @FXML
     private FlowPane playlistContainer;
 
-    private List<Playlist> playlistList = new ArrayList<>();
+    private Utente u;
+
+    /** Tutte le canzoni del catalogo. */
+    private List<Canzone> lista = new ArrayList<>();
+    /** Canzoni preferite dell'utente. */
+    private final List<Canzone> preferiti = new ArrayList<>();
+    /** Lista mostrata in tabella prima del filtro di ricerca (catalogo o preferiti). */
+    private List<Canzone> vistaCorrente = new ArrayList<>();
+
+    private final List<Playlist> playlistList = new ArrayList<>();
+    private Playlist playlistSelezionata = null;
+
+    // C'è una sola finestra di riproduzione alla volta (prima se ne potevano aprire tante
+    // e le canzoni suonavano insieme, scrivendo tutte sullo stesso file)
+    private static Stage playerStage;
+    private static RiproduzioneController playerController;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -76,117 +83,114 @@ public class UtenteController implements Initializable {
             return;
         }
 
-        lista = leggiCSV();
-        caricaPreferiti();
-        caricaPlaylist();
-        aggiornaVistaPlaylist();
-
         setupColonne();
         setupGrafica();
 
-        mostra(lista);
+        try {
+            lista = CanzoneDAO.tutte();
+            caricaPreferiti();
+            caricaPlaylist();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            nowPlayingLabel.setText("❌ " + Database.messaggioErrore(e));
+        }
+
+        aggiornaVistaPlaylist();
+
         vistaCorrente = lista;
+        applicaFiltro();
 
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> applicaFiltro());
 
-            if (newVal == null || newVal.trim().isEmpty()) {
-                mostra(vistaCorrente);
-                return;
+        // il listener va registrato UNA sola volta (prima veniva aggiunto a ogni click su una playlist)
+        searchAggiungiField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (playlistSelezionata != null) {
+                aggiornaListaSinistra(playlistSelezionata);
             }
-
-            String f = newVal.toLowerCase();
-            List<Canzone> filtrate = new ArrayList<Canzone>();
-
-            for (Canzone c : vistaCorrente) {
-
-                if (c == null) {
-                    continue;
-                }
-
-                String titolo = c.getTitolo();
-                String artista = c.getArtista();
-
-                if (titolo != null && artista != null) {
-
-                    if (titolo.toLowerCase().contains(f) || artista.toLowerCase().contains(f)) {
-                        filtrate.add(c);
-                    }
-                }
-            }
-
-            mostra(filtrate);
         });
+    }
+
+    // ===================== TABELLA CANZONI =====================
+
+    private void applicaFiltro() {
+
+        String testo = searchField.getText();
+
+        if (testo == null || testo.trim().isEmpty()) {
+            tableSongs.getItems().setAll(vistaCorrente);
+            return;
+        }
+
+        String f = testo.toLowerCase().trim();
+        List<Canzone> filtrate = new ArrayList<>();
+
+        for (Canzone c : vistaCorrente) {
+            if (c != null && corrisponde(c, f)) {
+                filtrate.add(c);
+            }
+        }
+
+        tableSongs.getItems().setAll(filtrate);
+    }
+
+    private static boolean corrisponde(Canzone c, String filtro) {
+        String titolo = c.getTitolo() == null ? "" : c.getTitolo().toLowerCase();
+        String artista = c.getArtista() == null ? "" : c.getArtista().toLowerCase();
+        return titolo.contains(filtro) || artista.contains(filtro);
     }
 
     private void setupGrafica() {
 
-        tableSongs.setRowFactory(tv -> new TableRow<Canzone>() {
+        tableSongs.setPlaceholder(new Label("Nessuna canzone"));
 
-            @Override
-            protected void updateItem(Canzone item, boolean empty) {
-
-                super.updateItem(item, empty);
-
-                if (empty || item == null) {
-                    setStyle("");
-                    return;
+        tableSongs.setRowFactory(tv -> {
+            TableRow<Canzone> row = new TableRow<Canzone>() {
+                @Override
+                protected void updateItem(Canzone item, boolean empty) {
+                    super.updateItem(item, empty);
+                    stileRiga(this, false);
                 }
+            };
 
-                if (isSelected()) {
-                    setStyle("-fx-background-color: #7c3aed;");
-                } else {
-                    setStyle("-fx-background-color: rgba(30,41,59,0.7);");
+            row.selectedProperty().addListener((obs, o, n) -> stileRiga(row, false));
+            row.setOnMouseEntered(e -> stileRiga(row, true));
+            row.setOnMouseExited(e -> stileRiga(row, false));
+
+            // doppio click sulla riga = riproduci
+            row.setOnMouseClicked(e -> {
+                if (e.getClickCount() == 2 && !row.isEmpty()) {
+                    riproduciDaTabella(row.getItem());
                 }
-
-                setOnMouseEntered(e -> {
-                    if (!empty && !isSelected() && getItem() != null) {
-                        setStyle("-fx-background-color: rgba(51,65,85,0.8);");
-                    }
-                });
-
-                setOnMouseExited(e -> {
-                    if (!empty && !isSelected() && getItem() != null) {
-                        setStyle("-fx-background-color: rgba(30,41,59,0.7);");
-                    }
-                });
-            }
+            });
+            return row;
         });
+    }
+
+    private void stileRiga(TableRow<Canzone> row, boolean hover) {
+        if (row.isEmpty() || row.getItem() == null) {
+            row.setStyle("");
+        } else if (row.isSelected()) {
+            row.setStyle("-fx-background-color: #7c3aed;");
+        } else if (hover) {
+            row.setStyle("-fx-background-color: rgba(51,65,85,0.8);");
+        } else {
+            row.setStyle("-fx-background-color: rgba(30,41,59,0.7);");
+        }
     }
 
     private void setupColonne() {
 
-        colTitolo.setCellValueFactory(d -> {
-            if (d == null || d.getValue() == null) {
-                return new SimpleStringProperty("");
-            }
-            String t = d.getValue().getTitolo();
-            if (t != null) {
-                return new SimpleStringProperty(t);
-            } else {
-                return new SimpleStringProperty("");
-            }
-        });
-
+        colTitolo.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue() == null || d.getValue().getTitolo() == null ? "" : d.getValue().getTitolo()));
         colTitolo.setPrefWidth(750);
         colTitolo.setMinWidth(300);
 
-        colArtista.setCellValueFactory(d -> {
-            if (d == null || d.getValue() == null) {
-                return new SimpleStringProperty("");
-            }
-            String a = d.getValue().getArtista();
-            if (a != null) {
-                return new SimpleStringProperty(a);
-            } else {
-                return new SimpleStringProperty("");
-            }
-        });
-
+        colArtista.setCellValueFactory(d -> new SimpleStringProperty(
+                d.getValue() == null || d.getValue().getArtista() == null ? "" : d.getValue().getArtista()));
         colArtista.setPrefWidth(750);
         colArtista.setMinWidth(250);
 
         colLike.setPrefWidth(60);
-
         colLike.setCellFactory(col -> new TableCell<Canzone, Void>() {
 
             private final Button btn = new Button();
@@ -195,54 +199,30 @@ public class UtenteController implements Initializable {
                 btn.setStyle("-fx-background-color: transparent;"
                         + "-fx-text-fill: white;"
                         + "-fx-font-size: 16;");
-
                 setStyle("-fx-alignment: CENTER;");
 
                 btn.setOnAction(e -> {
-
-                    if (getIndex() < 0) {
-                        return;
+                    Canzone c = canzoneDellaRiga(this);
+                    if (c != null) {
+                        togglePreferito(c);
                     }
-
-                    Canzone c = getTableView().getItems().get(getIndex());
-                    if (c == null) {
-                        return;
-                    }
-
-                    if (preferiti.contains(c)) {
-                        preferiti.remove(c);
-                    } else {
-                        preferiti.add(c);
-                    }
-
-                    aggiornaPreferiti(u.getId(), preferiti);
-                    tableSongs.refresh();
                 });
             }
 
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || getIndex() < 0) {
-                    setGraphic(null);
-                    return;
-                }
-                Canzone c = getTableView().getItems().get(getIndex());
+                Canzone c = empty ? null : canzoneDellaRiga(this);
                 if (c == null) {
                     setGraphic(null);
                     return;
                 }
-                if (preferiti.contains(c)) {
-                    btn.setText("❤");
-                } else {
-                    btn.setText("♡");
-                }
+                btn.setText(preferiti.contains(c) ? "❤" : "♡");
                 setGraphic(btn);
             }
         });
 
         colPlay.setPrefWidth(60);
-
         colPlay.setCellFactory(col -> new TableCell<Canzone, Void>() {
 
             private final Button btn = new Button("▶");
@@ -251,591 +231,117 @@ public class UtenteController implements Initializable {
                 btn.setStyle("-fx-background-color: #38bdf8;"
                         + "-fx-text-fill: black;"
                         + "-fx-background-radius: 10;");
-
                 setStyle("-fx-alignment: CENTER;");
 
                 btn.setOnAction(e -> {
-
-                    if (getIndex() < 0) {
-                        return;
+                    Canzone c = canzoneDellaRiga(this);
+                    if (c != null) {
+                        riproduciDaTabella(c);
                     }
-
-                    Canzone c = getTableView().getItems().get(getIndex());
-                    if (c == null) {
-                        return;
-                    }
-
-                    String titolo = c.getTitolo();
-                    if (titolo == null) {
-                        titolo = "";
-                    }
-
-                    nowPlayingLabel.setText("🎵 " + titolo);
-                    apriRiproduzione(c);
                 });
             }
 
             @Override
             protected void updateItem(Void item, boolean empty) {
-
                 super.updateItem(item, empty);
-
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(btn);
-                }
+                setGraphic(empty ? null : btn);
             }
         });
     }
 
-    private void mostra(List<Canzone> list) {
-
-        if (list == null) {
-            tableSongs.getItems().clear();
-            return;
+    private static Canzone canzoneDellaRiga(TableCell<Canzone, Void> cella) {
+        int i = cella.getIndex();
+        List<Canzone> items = cella.getTableView().getItems();
+        if (i < 0 || i >= items.size()) {
+            return null;
         }
-
-        tableSongs.getItems().setAll(list);
+        return items.get(i);
     }
 
-    public static ArrayList<Canzone> leggiCSV() {
+    // ===================== PREFERITI =====================
 
-        ArrayList<Canzone> list = new ArrayList<Canzone>();
-        File file = new File("Files/canzoni.csv");
-
-        if (!file.exists()) {
-            return list;
-        }
-
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-            String line;
-            boolean first = true;
-
-            while ((line = br.readLine()) != null) {
-
-                if (first) {
-                    first = false;
-                    continue;
-                }
-
-                if (line == null || line.trim().isEmpty()) {
-                    continue;
-                }
-
-                line = line.replace("\"", "").trim();
-
-                String[] p = line.split(",");
-
-                if (p.length < 5) {
-                    continue;
-                }
-
-                try {
-
-                    int n = Integer.parseInt(p[4].trim());
-
-                    list.add(new Canzone(
-                            p[0].trim(),
-                            p[1].trim(),
-                            Double.parseDouble(p[2].trim()),
-                            p[3].trim(),
-                            n
-                    ));
-
-                } catch (NumberFormatException ex) {
-                    System.out.println("RIGA SKIPPATA: " + line);
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return list;
-    }
-
-    public static void aggiornaPreferiti(int userId, List<Canzone> preferiti) {
-
-        File file = new File("Files/preferiti.csv");
-
-        List<String> output = new ArrayList<String>();
-        boolean trovato = false;
-
-        try {
-
-            if (!file.exists()) {
-                file.createNewFile();
-            }
-
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-                String line;
-                boolean first = true;
-
-                while ((line = br.readLine()) != null) {
-
-                    if (first) {
-                        output.add(line);
-                        first = false;
-                        continue;
-                    }
-
-                    if (line == null || line.trim().isEmpty()) {
-                        continue;
-                    }
-
-                    String[] p = line.split(",");
-                    if (p.length < 1) {
-                        continue;
-                    }
-
-                    int id = Integer.parseInt(p[0].trim());
-
-                    if (id == userId) {
-
-                        trovato = true;
-
-                        String ids = "";
-
-                        for (int i = 0; i < preferiti.size(); i++) {
-
-                            Canzone c = preferiti.get(i);
-
-                            if (c != null) {
-                                ids += c.getN();
-                            }
-
-                            if (i < preferiti.size() - 1) {
-                                ids += "|";
-                            }
-                        }
-
-                        output.add(userId + "," + ids);
-
-                    } else {
-                        output.add(line);
-                    }
-                }
-            }
-
-            if (!trovato) {
-
-                if (output.isEmpty()) {
-                    output.add("userId,songIds");
-                }
-
-                String ids = "";
-
-                for (int i = 0; i < preferiti.size(); i++) {
-
-                    Canzone c = preferiti.get(i);
-
-                    if (c != null) {
-                        ids += c.getN();
-                    }
-
-                    if (i < preferiti.size() - 1) {
-                        ids += "|";
-                    }
-                }
-
-                output.add(userId + "," + ids);
-            }
-
-            try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-
-                for (String l : output) {
-                    if (l != null) {
-                        bw.write(l);
-                        bw.newLine();
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void caricaPreferiti() {
+    private void caricaPreferiti() throws SQLException {
 
         preferiti.clear();
 
-        File file = new File("Files/preferiti.csv");
-
-        if (!file.exists()) {
-            return;
+        Map<Integer, Canzone> perId = new HashMap<>();
+        for (Canzone c : lista) {
+            perId.put(c.getN(), c);
         }
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-            String line;
-            boolean first = true;
-
-            while ((line = br.readLine()) != null) {
-
-                if (first) {
-                    first = false;
-                    continue;
-                }
-
-                if (line == null || line.trim().isEmpty()) {
-                    continue;
-                }
-
-                String[] p = line.split(",");
-
-                if (p.length < 2) {
-                    continue;
-                }
-
-                int id = Integer.parseInt(p[0].trim());
-
-                if (id == u.getId()) {
-
-                    String[] ids = p[1].split("\\|");
-
-                    for (String s : ids) {
-
-                        if (s == null || s.trim().isEmpty()) {
-                            continue;
-                        }
-
-                        int songId = Integer.parseInt(s.trim());
-
-                        for (Canzone c : lista) {
-                            if (c != null && c.getN() == songId) {
-                                preferiti.add(c);
-                            }
-                        }
-                    }
-                }
+        for (int id : PreferitiDAO.idPreferiti(u.getId())) {
+            Canzone c = perId.get(id);
+            if (c != null) {
+                preferiti.add(c);
             }
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
-    @FXML
-    private void apriImpostazioni() {
+    private void togglePreferito(Canzone c) {
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/ivibe/View/impostazioni.fxml"));
-            Parent root = loader.load();
-
-            ImpostazioniController controller = loader.getController();
-
-            Stage homeStage = (Stage) tableSongs.getScene().getWindow();
-            controller.setHomeStage(homeStage);
-
-            Stage stage = new Stage();
-            stage.setTitle("Impostazioni");
-            stage.setScene(new Scene(root));
-            stage.show();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    @FXML
-    public void logout() {
-
-        try {
-            Sessione.setUtenteCorrente(null);
-            Stage stage = (Stage) tableSongs.getScene().getWindow();
-            stage.close();
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/ivibe/View/Login.fxml"));
-            Parent root = loader.load();
-
-            Stage loginStage = new Stage();
-            loginStage.setScene(new Scene(root));
-            loginStage.setTitle("Login");
-            loginStage.setMaximized(true);
-
-            Image icon = new Image(getClass().getResourceAsStream("/ivibe/resources/images/LogoNS.png"));
-            loginStage.getIcons().add(icon);
-
-            loginStage.show();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void salvaPlaylist() {
-
-        File file = new File("Files/playlist.csv");
-        List<String> output = new ArrayList<>();
-
-        try {
-
-            if (!file.exists()) {
-                file.createNewFile();
-            }
-
-            output.add("userId,playlist");
-
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-                String line;
-                boolean first = true;
-
-                while ((line = br.readLine()) != null) {
-
-                    if (first) {
-                        first = false;
-                        continue;
-                    }
-
-                    if (line == null || line.trim().isEmpty()) {
-                        continue;
-                    }
-
-                    String[] p = line.split(",", 2);
-
-                    if (p.length < 2) {
-                        continue;
-                    }
-
-                    int id;
-
-                    try {
-                        id = Integer.parseInt(p[0].trim());
-                    } catch (Exception e) {
-                        continue;
-                    }
-
-                    if (id != u.getId()) {
-                        output.add(line);
-                    }
-                }
-            }
-
-            for (Playlist p : playlistList) {
-
-                StringBuilder sb = new StringBuilder();
-
-                sb.append(p.getNome());
-
-                for (Canzone c : p.getCanzoni()) {
-                    if (c != null) {
-                        sb.append("|").append(c.getN());
-                    }
-                }
-
-                output.add(u.getId() + "," + sb);
-            }
-
-            try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-
-                for (String l : output) {
-                    bw.write(l);
-                    bw.newLine();
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void caricaPlaylist() {
-
-        playlistList.clear();
-
-        File file = new File("Files/playlist.csv");
-
-        if (!file.exists()) {
-            return;
-        }
-
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-
-            String line;
-            boolean first = true;
-
-            while ((line = br.readLine()) != null) {
-
-                if (first) {
-                    first = false;
-                    continue;
-                }
-
-                if (line == null || line.trim().isEmpty()) {
-                    continue;
-                }
-
-                String[] parts = line.split(",", 2);
-
-                if (parts.length < 2) {
-                    continue;
-                }
-
-                int id;
-
-                try {
-                    id = Integer.parseInt(parts[0].trim());
-                } catch (Exception e) {
-                    continue;
-                }
-
-                if (id != u.getId()) {
-                    continue;
-                }
-
-                String[] dati = parts[1].split("\\|");
-
-                if (dati.length == 0) {
-                    continue;
-                }
-
-                String nomePlaylist = dati[0].trim();
-                Playlist playlist = new Playlist(nomePlaylist);
-
-                for (int i = 1; i < dati.length; i++) {
-
-                    try {
-                        int songId = Integer.parseInt(dati[i].trim());
-
-                        for (Canzone c : lista) {
-                            if (c != null && c.getN() == songId) {
-                                playlist.addCanzone(c);
-                                break;
-                            }
-                        }
-
-                    } catch (Exception ignored) {
-                    }
-                }
-
-                playlistList.add(playlist);
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @FXML
-    private void creaPlaylist() {
-
-        String nome = playlistNameField.getText();
-
-        if (nome == null || nome.trim().isEmpty()) {
-            playlistErrorLabel.setText("Il nome non può essere vuoto");
-            playlistErrorLabel.setStyle("-fx-text-fill: #f87171;");
-            return;
-        }
-
-        nome = nome.trim();
-
-        for (int i = 0; i < nome.length(); i++) {
-            char c = nome.charAt(i);
-
-            if (c == '"' || c == ',' || c == '|' || c == '\\' || c == '/') {
-                playlistErrorLabel.setText("Il nome contiene caratteri non validi");
-                playlistErrorLabel.setStyle("-fx-text-fill: #f87171;");
-                return;
-            }
-        }
-
-        for (Playlist p : playlistList) {
-            if (p.getNome().equalsIgnoreCase(nome)) {
-                playlistErrorLabel.setText("Playlist già esistente");
-                playlistErrorLabel.setStyle("-fx-text-fill: #f87171;");
-                return;
-            }
-        }
-
-        Playlist playlist = new Playlist(nome);
-        playlistList.add(playlist);
-
-        playlistNameField.clear();
-
-        playlistErrorLabel.setText("");
-
-        salvaPlaylist();
-        aggiornaVistaPlaylist();
-    }
-
-    private void aggiornaVistaPlaylist() {
-
-        playlistContainer.getChildren().clear();
-        dettaglioHBox.setVisible(false);
-        dettaglioHBox.setManaged(false);
-        playlistSelezionata = null;
-
-        for (Playlist p : playlistList) {
-
-            VBox box = new VBox(5);
-            box.setStyle(
-                    "-fx-background-color: #1e293b;"
-                    + "-fx-padding: 15;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-min-width: 120;"
-                    + "-fx-alignment: center;"
-            );
-
-            Label nome = new Label(p.getNome());
-            nome.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
-
-            Label count = new Label(p.getCanzoni().size() + " canzoni");
-            count.setStyle("-fx-text-fill: #94a3b8;");
-
-            Button btnElimina = new Button("✕");
-            btnElimina.setStyle(
-                    "-fx-background-color: transparent;"
-                    + "-fx-text-fill: #f87171;"
-                    + "-fx-font-size: 12;"
-            );
-            btnElimina.setOnAction(e -> {
-                e.consume();
-                playlistList.remove(p);
-                salvaPlaylist();
-                aggiornaVistaPlaylist();
-            });
-
-            box.getChildren().addAll(nome, count, btnElimina);
-            box.setOnMouseClicked(e -> mostraDettaglioPlaylist(p));
-            playlistContainer.getChildren().add(box);
-        }
-    }
-
-    private void mostraDettaglioPlaylist(Playlist p) {
-
-        playlistSelezionata = p;
-
-        titoloPlaylistLabel.setText("📋 " + p.getNome());
-
-        dettaglioHBox.setVisible(true);
-        dettaglioHBox.setManaged(true);
-
-        aggiornaListaSinistra(p, "");
-        aggiornaListaDestra(p);
-        searchAggiungiField.textProperty().addListener((obs, oldVal, newVal) -> {
-
-            String filtro;
-
-            if (newVal == null) {
-                filtro = "";
+            if (preferiti.contains(c)) {
+                PreferitiDAO.rimuovi(u.getId(), c);
+                preferiti.remove(c);
             } else {
-                filtro = newVal;
+                PreferitiDAO.aggiungi(u.getId(), c);
+                preferiti.add(c);
             }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            Finestre.errore(Database.messaggioErrore(ex));
+            return;
+        }
 
-            aggiornaListaSinistra(p, filtro);
-        });
+        if (vistaCorrente == preferiti) {
+            // nella pagina Preferiti la canzone tolta deve sparire subito
+            applicaFiltro();
+        } else {
+            tableSongs.refresh();
+        }
+    }
+
+    // ===================== NAVIGAZIONE =====================
+
+    private void mostraTabella(List<Canzone> vista, String titolo) {
+        playlistSelezionata = null;
+        playlistSection.setVisible(false);
+        playlistSection.setManaged(false);
+        tableSongs.setVisible(true);
+        tableSongs.setManaged(true);
+        searchField.setVisible(true);
+        searchField.setManaged(true);
+        if (sezioneLabel != null) {
+            sezioneLabel.setText(titolo);
+        }
+        vistaCorrente = vista;
+        applicaFiltro();
+    }
+
+    @FXML
+    private void apriHome() {
+        mostraTabella(lista, "🏠 Tutte le canzoni");
+    }
+
+    @FXML
+    private void apriPreferiti() {
+        mostraTabella(preferiti, "❤ I tuoi preferiti");
     }
 
     @FXML
     private void apriPlaylist() {
 
-        caricaPlaylist();
+        try {
+            caricaPlaylist();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            Finestre.errore(Database.messaggioErrore(e));
+        }
         aggiornaVistaPlaylist();
-        playlistSelezionata = null;
+        nascondiDettaglio();
+
+        if (sezioneLabel != null) {
+            sezioneLabel.setText("🎧 Le tue playlist");
+        }
 
         playlistSection.setVisible(true);
         playlistSection.setManaged(true);
@@ -848,147 +354,233 @@ public class UtenteController implements Initializable {
     }
 
     @FXML
-    private void apriHome() {
-        playlistSelezionata = null;
-        playlistSection.setVisible(false);
-        playlistSection.setManaged(false);
-        tableSongs.setVisible(true);
-        tableSongs.setManaged(true);
-        searchField.setVisible(true);
-        searchField.setManaged(true);
-        vistaCorrente = lista;
-        mostra(lista);
+    private void apriImpostazioni() {
+        try {
+            FXMLLoader loader = Finestre.apri(Finestre.IMPOSTAZIONI, "Impostazioni", false);
+            ImpostazioniController controller = loader.getController();
+            controller.setHomeStage((Stage) tableSongs.getScene().getWindow());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @FXML
-    private void apriPreferiti() {
-        playlistSelezionata = null;
-        playlistSection.setVisible(false);
-        playlistSection.setManaged(false);
-        tableSongs.setVisible(true);
-        tableSongs.setManaged(true);
-        searchField.setVisible(true);
-        searchField.setManaged(true);
-        vistaCorrente = preferiti;
-        mostra(preferiti);
+    public void logout() {
+        Sessione.logout();
+        chiudiPlayer();
+        Stage stage = (Stage) tableSongs.getScene().getWindow();
+        Finestre.sostituisci(stage, Finestre.LOGIN, "Login");
     }
 
-    private void aggiornaListaSinistra(Playlist p, String filtro) {
+    // ===================== PLAYLIST =====================
+
+    private void caricaPlaylist() throws SQLException {
+        playlistList.clear();
+        playlistList.addAll(PlaylistDAO.playlistUtente(u.getId()));
+    }
+
+    @FXML
+    private void creaPlaylist() {
+
+        String nome = playlistNameField.getText() == null ? "" : playlistNameField.getText().trim();
+
+        if (nome.isEmpty()) {
+            errorePlaylist("Il nome non può essere vuoto");
+            return;
+        }
+        if (nome.length() > 100) {
+            errorePlaylist("Nome troppo lungo (max 100 caratteri)");
+            return;
+        }
+
+        for (Playlist p : playlistList) {
+            if (p.getNome().equalsIgnoreCase(nome)) {
+                errorePlaylist("Playlist già esistente");
+                return;
+            }
+        }
+
+        try {
+            Playlist nuova = PlaylistDAO.crea(u.getId(), nome);
+            if (nuova != null) {
+                playlistList.add(nuova);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            errorePlaylist(Database.messaggioErrore(e));
+            return;
+        }
+
+        playlistNameField.clear();
+        playlistErrorLabel.setText("");
+        aggiornaVistaPlaylist();
+    }
+
+    private void errorePlaylist(String msg) {
+        playlistErrorLabel.setText(msg);
+        playlistErrorLabel.setStyle("-fx-text-fill: #f87171;");
+    }
+
+    private void nascondiDettaglio() {
+        dettaglioHBox.setVisible(false);
+        dettaglioHBox.setManaged(false);
+        playlistSelezionata = null;
+    }
+
+    /** Ridisegna i riquadri delle playlist (senza chiudere quella aperta). */
+    private void aggiornaVistaPlaylist() {
+
+        playlistContainer.getChildren().clear();
+
+        if (playlistList.isEmpty()) {
+            Label vuota = new Label("Non hai ancora nessuna playlist: creane una qui sopra!");
+            vuota.setStyle("-fx-text-fill: #94a3b8; -fx-font-style: italic;");
+            playlistContainer.getChildren().add(vuota);
+        }
+
+        for (Playlist p : playlistList) {
+
+            VBox box = new VBox(5);
+            String bordo = (p == playlistSelezionata) ? "-fx-border-color: #38bdf8; -fx-border-radius: 10;" : "";
+            box.setStyle("-fx-background-color: #1e293b;"
+                    + "-fx-padding: 15;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-min-width: 120;"
+                    + "-fx-alignment: center;"
+                    + "-fx-cursor: hand;"
+                    + bordo);
+
+            Label nome = new Label(p.getNome());
+            nome.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
+
+            Label count = new Label(p.getNumeroCanzoni() + (p.getNumeroCanzoni() == 1 ? " canzone" : " canzoni"));
+            count.setStyle("-fx-text-fill: #94a3b8;");
+
+            Button btnElimina = new Button("✕");
+            btnElimina.setStyle("-fx-background-color: transparent;"
+                    + "-fx-text-fill: #f87171;"
+                    + "-fx-font-size: 12;");
+            btnElimina.setOnAction(e -> {
+                e.consume();
+                eliminaPlaylist(p);
+            });
+
+            box.getChildren().addAll(nome, count, btnElimina);
+            box.setOnMouseClicked(e -> mostraDettaglioPlaylist(p));
+            playlistContainer.getChildren().add(box);
+        }
+    }
+
+    private void eliminaPlaylist(Playlist p) {
+
+        if (!Finestre.conferma("Eliminare la playlist \"" + p.getNome() + "\"?")) {
+            return;
+        }
+
+        try {
+            PlaylistDAO.elimina(p.getId());
+        } catch (SQLException e) {
+            e.printStackTrace();
+            errorePlaylist(Database.messaggioErrore(e));
+            return;
+        }
+
+        playlistList.remove(p);
+        if (p == playlistSelezionata) {
+            nascondiDettaglio();
+        }
+        aggiornaVistaPlaylist();
+    }
+
+    private void mostraDettaglioPlaylist(Playlist p) {
+
+        playlistSelezionata = p;
+        titoloPlaylistLabel.setText("📋 " + p.getNome());
+
+        dettaglioHBox.setVisible(true);
+        dettaglioHBox.setManaged(true);
+
+        aggiornaListaSinistra(p);
+        aggiornaListaDestra(p);
+        aggiornaVistaPlaylist();
+    }
+
+    private void toggleCanzonePlaylist(Playlist p, Canzone c) {
+        try {
+            if (p.containsCanzone(c)) {
+                PlaylistDAO.rimuoviCanzone(p.getId(), c);
+                p.removeCanzone(c);
+            } else {
+                PlaylistDAO.aggiungiCanzone(p.getId(), c);
+                p.addCanzone(c);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            Finestre.errore(Database.messaggioErrore(e));
+            return;
+        }
+
+        aggiornaListaSinistra(p);
+        aggiornaListaDestra(p);
+        aggiornaVistaPlaylist();
+    }
+
+    private HBox creaRigaLista() {
+        String base = "-fx-padding: 8 10; -fx-background-radius: 8; -fx-alignment: CENTER_LEFT;";
+        HBox riga = new HBox(12);
+        riga.setPrefHeight(42);
+        riga.setStyle(base);
+        riga.setOnMouseEntered(e -> riga.setStyle("-fx-background-color: rgba(51,65,85,0.8);" + base));
+        riga.setOnMouseExited(e -> riga.setStyle(base));
+        return riga;
+    }
+
+    private static String testoCanzone(Canzone c) {
+        String titolo = c.getTitolo() == null ? "" : c.getTitolo();
+        String artista = c.getArtista() == null ? "" : c.getArtista();
+        return titolo + " — " + artista;
+    }
+
+    /** Colonna sinistra: tutto il catalogo, con ➕ / ✓ per aggiungere o togliere. */
+    private void aggiornaListaSinistra(Playlist p) {
 
         listaAggiungiBox.getChildren().clear();
 
-        String f;
-
-        if (filtro == null) {
-            f = "";
-        } else {
-            f = filtro.toLowerCase().trim();
-        }
+        String testo = searchAggiungiField.getText();
+        String f = testo == null ? "" : testo.toLowerCase().trim();
 
         for (Canzone c : lista) {
 
-            if (c == null) {
+            if (c == null || (!f.isEmpty() && !corrisponde(c, f))) {
                 continue;
             }
 
-            String titolo;
+            boolean inPlaylist = p.containsCanzone(c);
 
-            if (c.getTitolo() != null) {
-                titolo = c.getTitolo();
-            } else {
-                titolo = "";
-            }
-            String artista;
-
-            if (c.getArtista() != null) {
-                artista = c.getArtista();
-            } else {
-                artista = "";
-            }
-
-            if (!f.isEmpty()
-                    && !titolo.toLowerCase().contains(f)
-                    && !artista.toLowerCase().contains(f)) {
-                continue;
-            }
-
-            boolean inPlaylist = p.getCanzoni().contains(c);
-
-            Button btnAggiungi;
-
-            if (inPlaylist) {
-                btnAggiungi = new Button("✓");
-            } else {
-                btnAggiungi = new Button("➕");
-            }
-
-            String colore;
-
-            if (inPlaylist) {
-                colore = "#4ade80";
-            } else {
-                colore = "#38bdf8";
-            }
-
-            btnAggiungi.setStyle(
-                    "-fx-background-color: transparent;"
-                    + "-fx-text-fill: " + colore + ";"
+            Button btnAggiungi = new Button(inPlaylist ? "✓" : "➕");
+            btnAggiungi.setStyle("-fx-background-color: transparent;"
+                    + "-fx-text-fill: " + (inPlaylist ? "#4ade80" : "#38bdf8") + ";"
                     + "-fx-font-size: 16;"
-                    + "-fx-font-weight: bold;"
-            );
-
+                    + "-fx-font-weight: bold;");
             btnAggiungi.setPrefSize(40, 40);
+            btnAggiungi.setOnAction(e -> toggleCanzonePlaylist(p, c));
 
-            HBox riga = new HBox(12);
-            riga.setPrefHeight(42);
-            riga.setStyle(
-                    "-fx-padding: 8 10;"
-                    + "-fx-background-radius: 8;"
-                    + "-fx-alignment: CENTER_LEFT;"
-            );
-
-            riga.setOnMouseEntered(e
-                    -> riga.setStyle("-fx-background-color: rgba(51,65,85,0.8);"
-                            + "-fx-padding: 8 10;"
-                            + "-fx-background-radius: 8;"
-                            + "-fx-alignment: CENTER_LEFT;")
-            );
-
-            riga.setOnMouseExited(e
-                    -> riga.setStyle("-fx-padding: 8 10;"
-                            + "-fx-background-radius: 8;"
-                            + "-fx-alignment: CENTER_LEFT;")
-            );
-
-            Label nomeSong = new Label(titolo + " — " + artista);
+            Label nomeSong = new Label(testoCanzone(c));
             nomeSong.setStyle("-fx-text-fill: white; -fx-font-size: 14;");
             nomeSong.setPrefWidth(320);
 
-            btnAggiungi.setOnAction(e -> {
-                if (p.getCanzoni().contains(c)) {
-                    p.removeCanzone(c);
-                } else {
-                    p.addCanzone(c);
-                }
-
-                salvaPlaylist();
-                aggiornaListaSinistra(p, searchAggiungiField.getText());
-                aggiornaListaDestra(p);
-                aggiornaVistaPlaylist();
-                mostraDettaglioPlaylist(p);
-            });
-
+            HBox riga = creaRigaLista();
             riga.getChildren().addAll(nomeSong, btnAggiungi);
             listaAggiungiBox.getChildren().add(riga);
         }
     }
 
+    /** Colonna destra: le canzoni della playlist, con ▶ per riprodurre e ✕ per togliere. */
     private void aggiornaListaDestra(Playlist p) {
 
         listaPlaylistBox.getChildren().clear();
 
         if (p.getCanzoni().isEmpty()) {
-
             Label vuota = new Label("Nessuna canzone aggiunta");
             vuota.setStyle("-fx-text-fill: #64748b; -fx-font-style: italic; -fx-font-size: 14;");
             listaPlaylistBox.getChildren().add(vuota);
@@ -1001,101 +593,26 @@ public class UtenteController implements Initializable {
                 continue;
             }
 
-            String titolo;
-
-            if (c.getTitolo() != null) {
-                titolo = c.getTitolo();
-            } else {
-                titolo = "";
-            }
-
-            String artista;
-
-            if (c.getArtista() != null) {
-                artista = c.getArtista();
-            } else {
-                artista = "";
-            }
-
-            HBox riga = new HBox(12);
-            riga.setPrefHeight(42);
-            riga.setStyle(
-                    "-fx-padding: 8 10;"
-                    + "-fx-background-radius: 8;"
-                    + "-fx-alignment: CENTER_LEFT;"
-            );
-
-            riga.setOnMouseEntered(e
-                    -> riga.setStyle("-fx-background-color: rgba(51,65,85,0.8);"
-                            + "-fx-padding: 8 10;"
-                            + "-fx-background-radius: 8;"
-                            + "-fx-alignment: CENTER_LEFT;")
-            );
-
-            riga.setOnMouseExited(e
-                    -> riga.setStyle("-fx-padding: 8 10;"
-                            + "-fx-background-radius: 8;"
-                            + "-fx-alignment: CENTER_LEFT;")
-            );
-
-            Label nomeSong = new Label(titolo + " — " + artista);
+            Label nomeSong = new Label(testoCanzone(c));
             nomeSong.setStyle("-fx-text-fill: white; -fx-font-size: 14;");
             nomeSong.setPrefWidth(280);
 
-            Button btnRimuovi = new Button("✕");
+            Button btnPlay = new Button("▶");
+            btnPlay.setStyle("-fx-background-color: transparent; -fx-text-fill: #38bdf8; -fx-font-size: 14;");
+            btnPlay.setOnAction(e -> riproduci(c, p.getCanzoni(), p.getNome()));
 
-            btnRimuovi.setStyle(
-                    "-fx-background-color: transparent;"
+            Button btnRimuovi = new Button("✕");
+            btnRimuovi.setStyle("-fx-background-color: transparent;"
                     + "-fx-text-fill: #f87171;"
                     + "-fx-font-size: 16;"
-                    + "-fx-font-weight: bold;"
-            );
-
+                    + "-fx-font-weight: bold;");
             btnRimuovi.setPrefSize(40, 40);
+            btnRimuovi.setOnAction(e -> toggleCanzonePlaylist(p, c));
 
-            btnRimuovi.setOnAction(e -> {
-                p.removeCanzone(c);
-                salvaPlaylist();
-                aggiornaListaSinistra(p, searchAggiungiField.getText());
-                aggiornaListaDestra(p);
-                aggiornaVistaPlaylist();
-                mostraDettaglioPlaylist(p);
-            });
-
-            riga.getChildren().addAll(nomeSong, btnRimuovi);
+            HBox riga = creaRigaLista();
+            riga.getChildren().addAll(nomeSong, btnPlay, btnRimuovi);
             listaPlaylistBox.getChildren().add(riga);
         }
-    }
-
-    private void apriRiproduzione(Canzone c, List<Canzone> coda, String titoloFinestra) {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/ivibe/View/riproduzione.fxml"));
-            Parent root = loader.load();
-
-            RiproduzioneController controller = loader.getController();
-
-            Stage stage = new Stage();
-
-            if (titoloFinestra != null) {
-                stage.setTitle(titoloFinestra);
-            } else {
-                stage.setTitle(c.getTitolo());
-            }
-
-            stage.setScene(new Scene(root));
-            Image icon = new Image(getClass().getResourceAsStream("/ivibe/resources/images/LogoNS.png"));
-            stage.getIcons().add(icon);
-            stage.show();
-
-            controller.startDownload(c.getUrl(), coda);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void apriRiproduzione(Canzone c) {
-        apriRiproduzione(c, new ArrayList<Canzone>(), c.getTitolo());
     }
 
     @FXML
@@ -1107,10 +624,7 @@ public class UtenteController implements Initializable {
 
         List<Canzone> canzoni = new ArrayList<>(playlistSelezionata.getCanzoni());
         Collections.shuffle(canzoni);
-
-        Canzone prima = canzoni.get(0);
-        nowPlayingLabel.setText("🎵 " + prima.getTitolo());
-        apriRiproduzione(prima, canzoni, "" + playlistSelezionata.getNome());
+        riproduci(canzoni.get(0), canzoni, playlistSelezionata.getNome());
     }
 
     @FXML
@@ -1121,8 +635,61 @@ public class UtenteController implements Initializable {
         }
 
         List<Canzone> canzoni = new ArrayList<>(playlistSelezionata.getCanzoni());
-        Canzone prima = canzoni.get(0);
-        nowPlayingLabel.setText("🎵 " + prima.getTitolo());
-        apriRiproduzione(prima, canzoni, "" + playlistSelezionata.getNome());
+        riproduci(canzoni.get(0), canzoni, playlistSelezionata.getNome());
+    }
+
+    // ===================== RIPRODUZIONE =====================
+
+    /** Dalla tabella: la coda è la lista visualizzata, così si passa alla canzone dopo. */
+    private void riproduciDaTabella(Canzone c) {
+        riproduci(c, new ArrayList<>(tableSongs.getItems()), null);
+    }
+
+    private void riproduci(Canzone c, List<Canzone> coda, String titoloFinestra) {
+
+        nowPlayingLabel.setText("🎵 " + c.getTitolo() + " — " + c.getArtista());
+
+        try {
+            if (playerStage == null || !playerStage.isShowing()) {
+                FXMLLoader loader = Finestre.apri(Finestre.RIPRODUZIONE,
+                        titoloFinestra != null ? titoloFinestra : c.getTitolo(), false);
+                playerController = loader.getController();
+                playerStage = (Stage) loader.<javafx.scene.Parent>getRoot().getScene().getWindow();
+            } else {
+                playerStage.toFront();
+            }
+
+            playerController.riproduci(c, coda);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Finestre.errore("Impossibile aprire il lettore");
+        }
+    }
+
+    /** Pulsante ▶ nella barra in basso: riporta in primo piano il lettore o suona la canzone selezionata. */
+    @FXML
+    private void mostraPlayer() {
+        if (playerStage != null && playerStage.isShowing()) {
+            playerStage.toFront();
+            playerController.play();
+            return;
+        }
+        Canzone sel = tableSongs.getSelectionModel().getSelectedItem();
+        if (sel == null && !tableSongs.getItems().isEmpty() && tableSongs.isVisible()) {
+            sel = tableSongs.getItems().get(0);
+        }
+        if (sel != null) {
+            riproduciDaTabella(sel);
+        }
+    }
+
+    /** Chiude il lettore (usato al logout). */
+    public static void chiudiPlayer() {
+        if (playerStage != null) {
+            playerStage.close();
+        }
+        playerStage = null;
+        playerController = null;
     }
 }

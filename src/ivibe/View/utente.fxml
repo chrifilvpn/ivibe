@@ -54,6 +54,10 @@
                      -fx-background-color: rgba(0,0,0,0.35);
                      -fx-background-radius: 20;">
 
+            <Label fx:id="sezioneLabel"
+                   text="🏠 Tutte le canzoni"
+                   style="-fx-text-fill: white; -fx-font-size: 20; -fx-font-weight: bold;"/>
+
             <!-- SEARCH -->
             <TextField fx:id="searchField"
                        promptText="Cerca canzone o artista..."
@@ -223,6 +227,7 @@
             <Region HBox.hgrow="ALWAYS"/>
 
             <Button text="▶"
+                    onAction="#mostraPlayer"
                     style="-fx-background-color: #38bdf8;
                            -fx-text-fill: black;
                            -fx-background-radius: 15;
