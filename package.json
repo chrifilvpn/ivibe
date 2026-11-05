@@ -1,0 +1,16 @@
+{
+  "name": "ivibe",
+  "version": "1.0.0",
+  "description": "iVibe - sito web (il codice è in web/). Questo file serve a Render quando la Root Directory è la cartella principale.",
+  "private": true,
+  "scripts": {
+    "start": "node web/server.js",
+    "test": "cd web && node --test"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

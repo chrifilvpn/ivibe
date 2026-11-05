@@ -16,3 +16,4 @@ Thumbs.db
 web/node_modules/
 web/data/
 credenziali*.txt
+node_modules/
