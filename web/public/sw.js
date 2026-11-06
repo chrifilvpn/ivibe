@@ -5,8 +5,8 @@
 //  - copertine di YouTube: copia salvata se c'è (vengono salvate quando scarichi una canzone)
 // I file audio/video scaricati NON passano da qui: stanno in IndexedDB.
 
-const VERSIONE = 'ivibe-v4';
-const GUSCIO = ['/', '/app.css?v=4', '/app.js?v=4', '/logo-192.png', '/logo-512.png', '/favicon.png', '/manifest.webmanifest'];
+const VERSIONE = 'ivibe-v5';
+const GUSCIO = ['/', '/app.css?v=5', '/app.js?v=5', '/logo-192.png', '/logo-512.png', '/favicon.png', '/manifest.webmanifest'];
 const API_OFFLINE = ['/api/me', '/api/catalogo', '/api/scarica-stato'];
 
 self.addEventListener('install', e => {

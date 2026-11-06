@@ -607,18 +607,32 @@ function vistaElenco(chiave, titolo, sottotitolo, sorgente, vuoto, conScaricaTut
       h('div', { class: 'actions' },
         h('button', { class: 'btn btn-primary', text: '▶ Riproduci', onclick: () => { const l = corrente(); if (l.length) Player.riproduci(l[0], l); } }),
         h('button', { class: 'btn btn-ghost', text: '⤮ Casuale', onclick: () => { const l = corrente(); if (l.length) Player.casuale(l); } }),
-        conScaricaTutte ? h('button', { class: 'btn btn-ghost solo-download', text: '↓ Scarica tutte', onclick: () => Download.scaricaTutte(corrente()) }) : null)),
+        conScaricaTutte ? h('button', { class: 'btn btn-ghost solo-download', text: '↓ Scarica tutte', onclick: () => chiediScaricaTutte(corrente()) }) : null)),
     h('div', { class: 'actions', style: 'margin-bottom:14px' }, campoRicerca(chiave, aggiorna)),
     elenco);
   aggiorna();
   return nodo;
 }
 
+/** Con tante canzoni chiede conferma e dice quanto spazio serve. */
+function chiediScaricaTutte(lista) {
+  const mancanti = lista.filter(c => !Offline.ha(c.id));
+  if (!mancanti.length) { toast('Sono già tutte scaricate ✓'); return; }
+  if (mancanti.length <= 15) { Download.scaricaTutte(mancanti); return; }
+  const videoScelto = Download.formato() === 'video';
+  const stima = Math.round(mancanti.length * (videoScelto ? 20 : 4));
+  dialogo({
+    titolo: `Scaricare ${mancanti.length} canzoni?`,
+    testo: `Servono circa ${stima} MB (${videoScelto ? 'video' : 'solo audio'}) e qualche minuto.\nPuoi continuare a usare iVibe mentre scarica: lascia la pagina aperta finché non diventano tutte ✓.`,
+    ok: 'Scarica',
+  }).then(r => { if (r) Download.scaricaTutte(mancanti); });
+}
+
 function vistaHome() {
   const ora = new Date().getHours();
   const saluto = ora < 6 ? 'Buonanotte' : ora < 13 ? 'Buongiorno' : ora < 18 ? 'Buon pomeriggio' : 'Buonasera';
   return vistaElenco('home', `${saluto}, ${stato.utente.nickname}`,
-    l => `${l.length} canzoni nel catalogo`, () => stato.canzoni, 'Il catalogo è vuoto');
+    l => `${l.length} canzoni nel catalogo · ${l.filter(c => Offline.ha(c.id)).length} scaricate`, () => stato.canzoni, 'Il catalogo è vuoto', true);
 }
 
 function vistaPreferiti() {
