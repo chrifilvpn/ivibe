@@ -53,7 +53,9 @@ async function api(metodo, url, corpo) {
     opzioni.body = JSON.stringify(corpo);
   }
   let r;
-  try { r = await fetch(url, opzioni); } catch { throw new Error('Connessione al server non riuscita'); }
+  try { r = await fetch(url, opzioni); } catch {
+    throw new Error(navigator.onLine ? 'Connessione al server non riuscita' : 'Sei offline: questa operazione richiede internet');
+  }
   let j = {};
   try { j = await r.json(); } catch { /* risposta vuota */ }
   if (r.status === 401 && stato.utente && !url.startsWith('/api/login') && !url.startsWith('/api/account')) {
@@ -155,6 +157,282 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiMenu()
 window.addEventListener('resize', chiudiMenu);
 document.addEventListener('scroll', chiudiMenu, true);
 
+// ===================== OFFLINE: FILE SCARICATI =====================
+// I file scaricati stanno nel browser (IndexedDB), separati per utente.
+// Restano anche chiudendo il sito e si ascoltano senza internet.
+
+const Offline = (() => {
+  let dbPromessa = null;
+  let uid = null;
+  const elenco = new Map(); // canzoneId -> { formato, size, quando, titolo, artista, videoId, durata }
+
+  function db() {
+    if (!dbPromessa) {
+      dbPromessa = new Promise((resolve, reject) => {
+        const r = indexedDB.open('ivibe-offline', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('file', { keyPath: 'chiave' });
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+    }
+    return dbPromessa;
+  }
+
+  async function operazione(modo, fn) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const t = d.transaction('file', modo);
+      const risultato = fn(t.objectStore('file'));
+      t.oncomplete = () => resolve(risultato && 'result' in risultato ? risultato.result : undefined);
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error || new Error('Spazio esaurito sul dispositivo'));
+    });
+  }
+
+  const chiave = id => `${uid}:${id}`;
+
+  /** Legge l'elenco dei file dell'utente (senza caricare i file in memoria). */
+  async function apri(utenteId) {
+    uid = utenteId;
+    elenco.clear();
+    if (!('indexedDB' in window)) return;
+    const d = await db();
+    await new Promise((resolve, reject) => {
+      const req = d.transaction('file').objectStore('file').openCursor();
+      req.onsuccess = () => {
+        const cur = req.result;
+        if (!cur) return resolve();
+        const v = cur.value;
+        if (v.uid === uid) elenco.set(v.id, { formato: v.formato, size: v.size, quando: v.quando, titolo: v.titolo, artista: v.artista, videoId: v.videoId, durata: v.durata });
+        cur.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function salva(c, formato, blob) {
+    const meta = { formato, size: blob.size, quando: Date.now(), titolo: c.titolo, artista: c.artista, videoId: c.videoId, durata: c.durata };
+    await operazione('readwrite', s => s.put({ chiave: chiave(c.id), uid, id: c.id, blob, ...meta }));
+    elenco.set(c.id, meta);
+  }
+
+  async function file(id) {
+    const r = await operazione('readonly', s => s.get(chiave(id)));
+    return r ? r.blob : null;
+  }
+
+  async function elimina(id) {
+    await operazione('readwrite', s => s.delete(chiave(id)));
+    elenco.delete(id);
+  }
+
+  return {
+    apri, salva, file, elimina,
+    ha: id => elenco.has(id),
+    info: id => elenco.get(id),
+    ids: () => [...elenco.keys()],
+    totale: () => [...elenco.values()].reduce((t, m) => t + (m.size || 0), 0),
+  };
+})();
+
+const mb = byte => (byte / 1048576).toFixed(byte < 10 * 1048576 ? 1 : 0).replace('.', ',') + ' MB';
+
+/** Canzone da mostrare anche se offline il catalogo non c'è. */
+function canzoneScaricata(id) {
+  if (stato.perId.has(id)) return stato.perId.get(id);
+  const m = Offline.info(id);
+  return m ? { id, titolo: m.titolo, artista: m.artista, videoId: m.videoId, durata: m.durata } : null;
+}
+
+// ---------- coda dei download ----------
+
+const Download = (() => {
+  const stati = new Map(); // id -> { fase: 'attesa'|'preparazione'|'scarico', perc, ctrl }
+  const coda = [];
+  const inAttesaDi = new Map(); // id -> [funzioni da chiamare quando il file è pronto (true) o fallito (false)]
+  const MAX_PARALLELI = 3; // download contemporanei (sul server ognuno è un processo yt-dlp separato)
+  let attivi = 0;
+  let disponibili = true; // il server ha i download attivi?
+  let pausaFino = 0;       // dopo un blocco di YouTube i download automatici si fermano un po'
+
+  function aggiornaUI() {
+    document.querySelectorAll('[data-dl]').forEach(disegna);
+    const nav = $('#nav-scaricati-n');
+    if (nav) nav.textContent = Offline.ids().length ? String(Offline.ids().length) : '';
+    document.body.classList.toggle('download-attivi', disponibili);
+  }
+
+  function disegna(b) {
+    {
+      const id = Number(b.dataset.dl);
+      const st = stati.get(id);
+      b.classList.toggle('scaricata', Offline.ha(id));
+      b.classList.toggle('in-corso', !!st);
+      if (st) {
+        b.textContent = st.fase === 'scarico' ? `${st.perc}%` : '…';
+        b.title = st.fase === 'attesa' ? 'In coda (tocca per annullare)' : st.fase === 'preparazione' ? 'Il server sta scaricando da YouTube… (tocca per annullare)' : 'Download in corso (tocca per annullare)';
+      } else if (Offline.ha(id)) {
+        b.textContent = '✓';
+        b.title = 'Scaricata: disponibile offline';
+      } else {
+        b.textContent = '↓';
+        b.title = 'Scarica per ascoltare offline';
+      }
+      b.setAttribute('aria-label', b.title);
+      b.hidden = !disponibili && !Offline.ha(id);
+    }
+  }
+
+  function formato() { return leggiPref('formato', 'audio'); }
+
+  async function esegui(c) {
+    const st = stati.get(c.id);
+    st.fase = 'preparazione';
+    aggiornaUI();
+    const fmt = formato();
+    const r = await fetch(`/api/scarica/${c.id}?formato=${fmt}`, { credentials: 'same-origin', signal: st.ctrl.signal });
+    if (!r.ok) {
+      let msg = `Errore ${r.status}`;
+      try { msg = (await r.json()).errore || msg; } catch { /* niente */ }
+      throw new Error(msg);
+    }
+    const tot = Number(r.headers.get('content-length')) || 0;
+    const tipo = r.headers.get('content-type') || 'audio/mp4';
+    st.fase = 'scarico';
+    st.perc = 0;
+    const lettore = r.body.getReader();
+    const pezzi = [];
+    let letti = 0, ultimo = 0;
+    for (;;) {
+      const { done, value } = await lettore.read();
+      if (done) break;
+      pezzi.push(value);
+      letti += value.length;
+      if (tot && Date.now() - ultimo > 250) { st.perc = Math.min(99, Math.floor((letti / tot) * 100)); ultimo = Date.now(); aggiornaUI(); }
+    }
+    await Offline.salva(c, fmt, new Blob(pezzi, { type: tipo }));
+    // salva anche la copertina, così si vede offline
+    if ('caches' in window) {
+      caches.open('ivibe-img').then(cache => Promise.all(['default', 'hqdefault'].map(q =>
+        fetch(thumb(c.videoId, q), { mode: 'no-cors' }).then(res => cache.put(thumb(c.videoId, q), res))))).catch(() => {});
+    }
+  }
+
+  function prossimo() {
+    while (attivi < MAX_PARALLELI && coda.length) avviaDownload(coda.shift());
+  }
+
+  async function avviaDownload(c) {
+    attivi++;
+    let ok = false;
+    try {
+      await esegui(c);
+      ok = true;
+      if (!stati.get(c.id)?.silenzioso) toast(`"${c.titolo}" disponibile offline ✓`);
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        const silenzioso = stati.get(c.id)?.silenzioso;
+        // se YouTube blocca il server è inutile continuare: stop ai download automatici per 10 minuti
+        if (/bloccato|disattivati|non è installato/.test(e.message)) {
+          if (Date.now() > pausaFino) toast(e.message, true);
+          pausaFino = Date.now() + 10 * 60 * 1000;
+          for (const x of coda.splice(0)) {
+            stati.delete(x.id);
+            for (const fn of inAttesaDi.get(x.id) || []) fn(false);
+            inAttesaDi.delete(x.id);
+          }
+        } else if (!silenzioso) {
+          toast(`"${c.titolo}": ${e.message}`, true);
+        }
+      }
+    } finally {
+      stati.delete(c.id);
+      for (const fn of inAttesaDi.get(c.id) || []) fn(ok);
+      inAttesaDi.delete(c.id);
+      attivi--;
+      aggiornaUI();
+      if (rottaCorrente().vista === 'scaricati') render();
+      prossimo();
+    }
+  }
+
+  /**
+   * silenzioso: nessun messaggio (download automatici)
+   * subito: passa davanti agli altri in coda (canzone che si vuole ascoltare adesso)
+   */
+  function scarica(c, silenzioso = false, subito = false) {
+    if (Offline.ha(c.id)) return false;
+    if (stati.has(c.id)) {
+      if (subito) { // ancora in attesa: la faccio partire subito
+        const i = coda.findIndex(x => x.id === c.id);
+        if (i !== -1) { coda.splice(i, 1); avviaDownload(c); }
+      }
+      return false;
+    }
+    if (!navigator.onLine) { if (!silenzioso) toast('Sei offline: collegati a internet per scaricare', true); return false; }
+    if (!disponibili) { if (!silenzioso) toast('I download non sono disponibili su questo sito', true); return false; }
+    if (silenzioso && !subito && Date.now() < pausaFino) return false;
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    stati.set(c.id, { fase: 'attesa', perc: 0, ctrl: new AbortController(), silenzioso });
+    if (subito) { avviaDownload(c); return true; } // non aspetta il proprio turno
+    coda.push(c);
+    aggiornaUI();
+    prossimo();
+    return true;
+  }
+
+  function annulla(id) {
+    const st = stati.get(id);
+    if (!st) return;
+    st.ctrl.abort();
+    const i = coda.findIndex(x => x.id === id);
+    if (i !== -1) coda.splice(i, 1);
+    stati.delete(id);
+    aggiornaUI();
+  }
+
+  function scaricaTutte(lista) {
+    const n = lista.filter(c => scarica(c, true)).length;
+    toast(n ? `${n} ${n === 1 ? 'canzone' : 'canzoni'} in download` : 'Sono già tutte scaricate');
+  }
+
+  async function rimuovi(c) {
+    annulla(c.id);
+    await Offline.elimina(c.id);
+    if (Player.corrente() && Player.corrente().id === c.id) toast('Rimossa: finirà di suonare questa volta');
+    aggiornaUI();
+  }
+
+  async function controllaServer() {
+    try { disponibili = !!(await api('GET', '/api/scarica-stato')).attivi; } catch { /* offline: lasciamo com'è */ }
+    aggiornaUI();
+  }
+
+  /** Chiama fn(true/false) quando il download della canzone finisce. */
+  function quandoPronta(id, fn) {
+    if (!inAttesaDi.has(id)) inAttesaDi.set(id, []);
+    inAttesaDi.get(id).push(fn);
+  }
+
+  const automatico = () => leggiPref('autoScarica', true);
+
+  return { scarica, scaricaTutte, annulla, rimuovi, quandoPronta, automatico, inCorso: id => stati.has(id), aggiornaUI, disegna, controllaServer, formato, disponibili: () => disponibili };
+})();
+
+function pulsanteDownload(c) {
+  const b = h('button', {
+    class: 'btn-icon dl', dataset: { dl: c.id },
+    onclick: e => {
+      e.stopPropagation();
+      if (Download.inCorso(c.id)) { Download.annulla(c.id); toast('Download annullato'); }
+      else if (Offline.ha(c.id)) menuCanzone(e.currentTarget, c);
+      else Download.scarica(c);
+    },
+  });
+  Download.disegna(b);
+  return b;
+}
+
 // ===================== AZIONI SU PREFERITI E PLAYLIST =====================
 
 async function togglePreferito(c) {
@@ -215,6 +493,15 @@ async function impostaInPlaylist(pl, c, presente) {
   } catch (e) { toast(e.message, true); return null; }
 }
 
+/** Fa scaricare il file "vero" (finisce nella cartella Download del dispositivo). */
+function salvaFile(c) {
+  toast('Preparazione del file… può volerci qualche secondo');
+  const a = h('a', { href: `/api/scarica/${c.id}?formato=${Download.formato()}`, download: '' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
 function menuCanzone(btn, c) {
   const voci = [{ titolo: 'Aggiungi a playlist' }];
   for (const pl of stato.playlist) {
@@ -225,6 +512,18 @@ function menuCanzone(btn, c) {
   voci.push('-');
   voci.push({ testo: isPreferito(c.id) ? 'Togli dai preferiti' : 'Aggiungi ai preferiti', azione: () => togglePreferito(c) });
   voci.push({ testo: 'Riproduci dopo', azione: () => { Player.accoda(c); toast('Aggiunta alla coda'); } });
+  if (Offline.ha(c.id)) {
+    const info = Offline.info(c.id);
+    voci.push('-', { titolo: `Offline · ${info.formato === 'video' ? 'video' : 'audio'} · ${mb(info.size)}` });
+    voci.push({ testo: 'Rimuovi dal dispositivo', azione: () => Download.rimuovi(c).then(() => { toast('Download rimosso'); if (rottaCorrente().vista === 'scaricati') render(); }) });
+  } else if (Download.inCorso(c.id)) {
+    voci.push('-', { testo: 'Annulla download', azione: () => Download.annulla(c.id) });
+  } else if (Download.disponibili()) {
+    voci.push('-', { testo: '↓ Scarica per ascoltare offline', azione: () => Download.scarica(c) });
+  }
+  if (Download.disponibili() && navigator.onLine) {
+    voci.push({ testo: `Salva il file sul dispositivo (.${Download.formato() === 'video' ? 'mp4' : 'm4a'})`, azione: () => salvaFile(c) });
+  }
   voci.push({ testo: 'Apri su YouTube ↗', azione: () => window.open(`https://www.youtube.com/watch?v=${c.videoId}`, '_blank', 'noopener') });
   apriMenu(btn, voci);
 }
@@ -248,7 +547,7 @@ function listaCanzoni(canzoni, opzioni = {}) {
       onclick: e => { e.stopPropagation(); menuCanzone(e.currentTarget, c); },
     });
     return h('div', {
-      class: 'song' + (cur && cur.id === c.id ? ' playing' : ''), role: 'listitem', tabindex: 0, dataset: { song: c.id },
+      class: 'song' + (cur && cur.id === c.id ? ' playing' : '') + (Offline.ha(c.id) ? '' : ' non-scaricata'), role: 'listitem', tabindex: 0, dataset: { song: c.id },
       onclick: () => Player.riproduci(c, canzoni),
       onkeydown: e => { if (e.key === 'Enter' && e.target === e.currentTarget) Player.riproduci(c, canzoni); },
     },
@@ -256,7 +555,7 @@ function listaCanzoni(canzoni, opzioni = {}) {
       h('img', { class: 's-thumb', src: thumb(c.videoId), alt: '', loading: 'lazy', width: 44, height: 44 }),
       h('div', { class: 's-text' }, h('div', { class: 's-title', text: c.titolo }), h('div', { class: 's-artist', text: c.artista })),
       h('span', { class: 's-dur', text: c.durata ? durata(c.durata) : '' }),
-      h('div', { class: 's-actions' }, like, opzioni.extra ? opzioni.extra(c, i) : null, altro),
+      h('div', { class: 's-actions' }, pulsanteDownload(c), like, opzioni.extra ? opzioni.extra(c, i) : null, altro),
     );
   }));
 }
@@ -291,7 +590,7 @@ function intestazioneMobile() {
     h('button', { class: 'btn btn-ghost btn-sm', text: 'Esci', onclick: logout }));
 }
 
-function vistaElenco(chiave, titolo, sottotitolo, sorgente, vuoto) {
+function vistaElenco(chiave, titolo, sottotitolo, sorgente, vuoto, conScaricaTutte = false) {
   const elenco = h('div');
   const conta = h('p', { class: 'sub' });
   const aggiorna = () => {
@@ -307,7 +606,8 @@ function vistaElenco(chiave, titolo, sottotitolo, sorgente, vuoto) {
       h('div', {}, h('h1', { text: titolo }), conta),
       h('div', { class: 'actions' },
         h('button', { class: 'btn btn-primary', text: '▶ Riproduci', onclick: () => { const l = corrente(); if (l.length) Player.riproduci(l[0], l); } }),
-        h('button', { class: 'btn btn-ghost', text: '⤮ Casuale', onclick: () => { const l = corrente(); if (l.length) Player.casuale(l); } }))),
+        h('button', { class: 'btn btn-ghost', text: '⤮ Casuale', onclick: () => { const l = corrente(); if (l.length) Player.casuale(l); } }),
+        conScaricaTutte ? h('button', { class: 'btn btn-ghost solo-download', text: '↓ Scarica tutte', onclick: () => Download.scaricaTutte(corrente()) }) : null)),
     h('div', { class: 'actions', style: 'margin-bottom:14px' }, campoRicerca(chiave, aggiorna)),
     elenco);
   aggiorna();
@@ -324,7 +624,7 @@ function vistaHome() {
 function vistaPreferiti() {
   return vistaElenco('preferiti', 'Preferiti',
     l => l.length === 1 ? '1 canzone' : `${l.length} canzoni`, () => canzoniDi(stato.preferiti).reverse(),
-    'Tocca ♡ su una canzone per aggiungerla qui');
+    'Tocca ♡ su una canzone per aggiungerla qui', true);
 }
 
 function copertina(pl) {
@@ -413,6 +713,7 @@ function vistaDettaglioPlaylist(id) {
       h('div', { class: 'actions' },
         h('button', { class: 'btn btn-primary', text: '▶ Riproduci', disabled: !canzoni.length, onclick: () => Player.riproduci(canzoni[0], canzoni) }),
         h('button', { class: 'btn btn-ghost', text: '⤮ Casuale', disabled: !canzoni.length, onclick: () => Player.casuale(canzoni) }),
+        h('button', { class: 'btn btn-ghost solo-download', text: '↓ Scarica', disabled: !canzoni.length, onclick: () => Download.scaricaTutte(canzoni) }),
         h('button', { class: 'btn btn-ghost', text: 'Rinomina', onclick: rinomina }),
         h('button', { class: 'btn btn-danger', text: 'Elimina', onclick: elimina }))),
     listaCanzoni(canzoni, { extra, vuoto: 'Playlist vuota: aggiungi canzoni qui sotto' }),
@@ -420,6 +721,49 @@ function vistaDettaglioPlaylist(id) {
       h('h2', { text: 'Aggiungi canzoni' }),
       h('div', { style: 'margin-bottom:10px' }, campoRicerca('aggiungi', aggiornaRisultati)),
       risultati));
+}
+
+// ---------- Scaricati (offline) ----------
+
+function vistaScaricati() {
+  const lista = Offline.ids().map(canzoneScaricata).filter(Boolean).reverse();
+  const fmt = Download.formato();
+  const scelta = (val, testo, nota) => h('label', { class: 'scelta' + (fmt === val ? ' on' : '') },
+    h('input', { type: 'radio', name: 'formato', value: val, checked: fmt === val, onchange: () => { salvaPref('formato', val); render(); } }),
+    h('span', {}, h('strong', { text: testo }), h('small', { text: nota })));
+
+  const svuota = () => dialogo({
+    titolo: 'Eliminare tutti i download?', testo: `Verranno liberati ${mb(Offline.totale())} sul dispositivo. Le canzoni restano nel catalogo.`,
+    ok: 'Elimina tutti', pericolo: true,
+    azione: async () => { for (const id of Offline.ids()) await Offline.elimina(id); },
+  }).then(r => { if (r) { toast('Download eliminati'); Download.aggiornaUI(); render(); } });
+
+  const spazio = h('span');
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(e => { if (e.quota) spazio.textContent = ` · spazio libero circa ${mb(Math.max(0, e.quota - e.usage))}`; }).catch(() => {});
+  }
+
+  return h('section', {},
+    intestazioneMobile(),
+    h('div', { class: 'page-head' },
+      h('div', {}, h('h1', { text: 'Scaricati' }),
+        h('p', { class: 'sub' }, lista.length ? `${lista.length} ${lista.length === 1 ? 'canzone' : 'canzoni'} · ${mb(Offline.totale())}` : 'Nessuna canzone scaricata', spazio)),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn btn-primary', text: '▶ Riproduci', disabled: !lista.length, onclick: () => Player.riproduci(lista[0], lista) }),
+        h('button', { class: 'btn btn-ghost', text: '⤮ Casuale', disabled: !lista.length, onclick: () => Player.casuale(lista) }),
+        lista.length ? h('button', { class: 'btn btn-danger', text: 'Elimina tutti', onclick: svuota }) : null)),
+    Download.disponibili() ? h('div', { class: 'card', style: 'margin-bottom:20px' },
+      h('h2', { text: 'Cosa scaricare' }),
+      h('div', { class: 'scelte' },
+        scelta('audio', 'Solo audio', 'M4A · circa 4 MB a canzone · consigliato'),
+        scelta('video', 'Video', 'MP4 360p · circa 15-25 MB a canzone')),
+      h('label', { class: 'scelta' + (Download.automatico() ? ' on' : ''), style: 'margin-top:10px' },
+        h('input', { type: 'checkbox', checked: Download.automatico(), onchange: e => { salvaPref('autoScarica', e.target.checked); render(); } }),
+        h('span', {}, h('strong', { text: 'Scarica in automatico quello che ascolti' }),
+          h('small', { text: 'Ogni canzone che fai partire viene salvata sul dispositivo: la volta dopo parte subito e funziona offline.' }))),
+      h('p', { class: 'muted', style: 'margin:12px 0 0;font-size:14px', text: 'Puoi anche toccare ↓ accanto a una canzone, oppure "Scarica" in una playlist o nei preferiti. Le canzoni che YouTube non fa riprodurre sul sito vengono scaricate e fatte partire in automatico.' }))
+      : h('div', { class: 'notice', text: 'I download non sono disponibili su questo sito: puoi ascoltare solo quello che hai già scaricato.' }),
+    listaCanzoni(lista, { vuoto: 'Qui trovi le canzoni che scarichi per ascoltarle offline' }));
 }
 
 // ---------- Impostazioni ----------
@@ -639,6 +983,7 @@ function render() {
   else if (vista === 'playlist') nodo = id ? vistaDettaglioPlaylist(id) : vistaPlaylist();
   else if (vista === 'admin') nodo = vistaAdmin();
   else if (vista === 'impostazioni') nodo = vistaImpostazioni();
+  else if (vista === 'scaricati') nodo = vistaScaricati();
   else { location.hash = '#/home'; return; }
 
   const content = $('#content');
@@ -649,18 +994,24 @@ function render() {
   if (stessa) window.scrollTo(0, scroll); else window.scrollTo(0, 0);
 
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === vista));
-  document.title = { home: 'iVibe', preferiti: 'Preferiti · iVibe', playlist: 'Playlist · iVibe', admin: 'Admin · iVibe', impostazioni: 'Impostazioni · iVibe' }[vista];
+  document.title = { home: 'iVibe', preferiti: 'Preferiti · iVibe', playlist: 'Playlist · iVibe', admin: 'Admin · iVibe', impostazioni: 'Impostazioni · iVibe', scaricati: 'Scaricati · iVibe' }[vista];
+  Download.aggiornaUI();
 }
 window.addEventListener('hashchange', render);
 
-// ===================== PLAYER (YouTube IFrame API) =====================
+// ===================== PLAYER =====================
+// Due "motori": il player di YouTube (online) e un elemento <video> che suona
+// i file scaricati sul dispositivo (funziona anche senza internet).
 
 const Player = (() => {
   let yt = null, pronto = false, inAttesa = null;
+  let motore = null; // 'yt' | 'locale'
+  let urlLocale = null;
   let coda = [], ordineOriginale = [], indice = -1;
   let casuale = leggiPref('casuale', false), ripeti = leggiPref('ripeti', false);
   let inRiproduzione = false, trascinando = false, erroriDiFila = 0;
   let videoVisibile = leggiPref('video', false); // di default si sente solo l'audio
+  const loc = () => $('#locale');
 
   function mostraVideo(si, salva = true) {
     videoVisibile = si;
@@ -675,6 +1026,22 @@ const Player = (() => {
 
   const corrente = () => (indice >= 0 ? coda[indice] : null);
 
+  // ---- operazioni comuni ai due motori ----
+  const tempo = () => (motore === 'locale' ? loc().currentTime : pronto && yt.getCurrentTime ? yt.getCurrentTime() : 0) || 0;
+  const totale = () => (motore === 'locale' ? (Number.isFinite(loc().duration) ? loc().duration : 0) : pronto && yt.getDuration ? yt.getDuration() : 0) || 0;
+  function vaiA(sec) { if (motore === 'locale') loc().currentTime = sec; else if (pronto) yt.seekTo(sec, true); }
+  function impostaVolume(v) { loc().volume = v / 100; if (pronto) yt.setVolume(v); }
+
+  function quandoSuona(si) { inRiproduzione = si; if (si) erroriDiFila = 0; aggiornaPulsantePlay(); }
+
+  function erroreRiproduzione(msg) {
+    const c = corrente();
+    toast(`"${c ? c.titolo : 'La canzone'}" ${msg}`, true);
+    erroriDiFila++;
+    if (erroriDiFila < Math.min(5, coda.length)) setTimeout(() => successiva(true), 1200);
+    else { inRiproduzione = false; aggiornaPulsantePlay(); }
+  }
+
   function caricaApi() {
     if (window.YT || document.getElementById('yt-api')) return;
     window.onYouTubeIframeAPIReady = () => {
@@ -685,21 +1052,25 @@ const Player = (() => {
           onReady: () => {
             pronto = true;
             yt.setVolume(Number($('#volume').value));
-            if (inAttesa) { yt.loadVideoById(inAttesa); inAttesa = null; }
+            if (inAttesa && motore === 'yt') yt.loadVideoById(inAttesa);
+            inAttesa = null;
           },
           onStateChange: e => {
-            if (e.data === YT.PlayerState.PLAYING) { inRiproduzione = true; erroriDiFila = 0; }
-            if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) inRiproduzione = false;
-            if (e.data === YT.PlayerState.ENDED) successiva(true);
-            aggiornaPulsantePlay();
+            if (motore !== 'yt') return;
+            if (e.data === YT.PlayerState.PLAYING) quandoSuona(true);
+            if (e.data === YT.PlayerState.PAUSED) quandoSuona(false);
+            if (e.data === YT.PlayerState.ENDED) { quandoSuona(false); successiva(true); }
           },
           onError: e => {
+            if (motore !== 'yt') return;
             const c = corrente();
-            const msg = e.data === 101 || e.data === 150 ? 'non si può riprodurre fuori da YouTube'
-              : e.data === 100 ? 'non è più disponibile' : 'non si riesce a riprodurre';
-            toast(`"${c ? c.titolo : 'Il video'}" ${msg}`, true);
-            erroriDiFila++;
-            if (erroriDiFila < Math.min(5, coda.length)) setTimeout(() => successiva(true), 1200);
+            // 101/150 = il proprietario non permette di vederlo fuori da YouTube: lo scarichiamo noi
+            if ((e.data === 101 || e.data === 150 || e.data === 5) && c && Download.disponibili() && navigator.onLine) {
+              suonaDopoDownload(c);
+              return;
+            }
+            erroreRiproduzione(e.data === 101 || e.data === 150 ? 'non si può riprodurre fuori da YouTube'
+              : e.data === 100 ? 'non è più disponibile' : 'non si riesce a riprodurre');
           },
         },
       });
@@ -707,7 +1078,20 @@ const Player = (() => {
     document.head.append(h('script', { id: 'yt-api', src: 'https://www.youtube.com/iframe_api', async: true }));
   }
 
-  function carica(c) {
+  /** Scarica la canzone (prima di tutte le altre) e appena è pronta la fa partire. */
+  function suonaDopoDownload(c) {
+    if (pronto) yt.stopVideo();
+    quandoSuona(false);
+    toast(`Preparo "${c.titolo}" sul tuo dispositivo, parte tra pochi secondi…`);
+    Download.quandoPronta(c.id, ok => {
+      if (corrente() !== c) return;
+      if (ok) carica(c);
+      else erroreRiproduzione('non si riesce a scaricare');
+    });
+    Download.scarica(c, true, true);
+  }
+
+  async function carica(c) {
     if (!c) return;
     $('#player').hidden = false;
     $('#video').hidden = false;
@@ -726,6 +1110,31 @@ const Player = (() => {
         navigator.mediaSession.metadata = new MediaMetadata({ title: c.titolo, artist: c.artista, album: 'iVibe', artwork: [{ src: thumb(c.videoId, 'hqdefault'), sizes: '480x360', type: 'image/jpeg' }] });
       } catch { /* non supportato */ }
     }
+
+    const blob = Offline.ha(c.id) ? await Offline.file(c.id).catch(() => null) : null;
+    if (corrente() !== c) return; // nel frattempo è stata scelta un'altra canzone
+
+    if (blob) {
+      // file scaricato: suona dal dispositivo, anche offline
+      if (pronto) yt.pauseVideo();
+      motore = 'locale';
+      $('#video').classList.add('motore-locale');
+      if (urlLocale) URL.revokeObjectURL(urlLocale);
+      urlLocale = URL.createObjectURL(blob);
+      const v = loc();
+      v.poster = thumb(c.videoId, 'hqdefault');
+      v.src = urlLocale;
+      v.play().catch(() => quandoSuona(false));
+      return;
+    }
+
+    // opzione "scarica quello che ascolti": la prossima volta parte dal dispositivo (anche offline)
+    if (Download.automatico()) Download.scarica(c, true);
+
+    loc().pause();
+    motore = 'yt';
+    $('#video').classList.remove('motore-locale');
+    if (!navigator.onLine) { erroreRiproduzione('non è scaricata: senza internet non si può ascoltare'); return; }
     if (pronto) yt.loadVideoById(c.videoId);
     else { inAttesa = c.videoId; caricaApi(); }
   }
@@ -738,6 +1147,8 @@ const Player = (() => {
 
   function riproduci(c, lista) {
     ordineOriginale = (lista && lista.length ? lista : [c]).slice();
+    // offline si saltano le canzoni non scaricate
+    if (!navigator.onLine) ordineOriginale = ordineOriginale.filter(x => x.id === c.id || Offline.ha(x.id));
     if (casuale) coda = [c, ...mescola(ordineOriginale.filter(x => x.id !== c.id))];
     else coda = ordineOriginale.slice();
     indice = coda.findIndex(x => x.id === c.id);
@@ -748,8 +1159,9 @@ const Player = (() => {
 
   function riproduciCasuale(lista) {
     if (!casuale) { casuale = true; salvaPref('casuale', true); aggiornaPulsanti(); }
-    const primo = lista[Math.floor(Math.random() * lista.length)];
-    riproduci(primo, lista);
+    const pool = navigator.onLine ? lista : lista.filter(x => Offline.ha(x.id));
+    if (!pool.length) { toast('Nessuna canzone scaricata in questa lista', true); return; }
+    riproduci(pool[Math.floor(Math.random() * pool.length)], pool);
   }
 
   function successiva(automatica = false) {
@@ -761,12 +1173,12 @@ const Player = (() => {
   }
 
   function precedente() {
-    if (pronto && yt.getCurrentTime && yt.getCurrentTime() > 3) { yt.seekTo(0, true); return; }
-    if (indice > 0) { indice--; carica(coda[indice]); }
-    else if (pronto) yt.seekTo(0, true);
+    if (tempo() > 3) { vaiA(0); return; }
+    if (indice > 0) { indice--; carica(coda[indice]); } else vaiA(0);
   }
 
   function playPausa() {
+    if (motore === 'locale') { const v = loc(); if (v.paused) v.play().catch(() => {}); else v.pause(); return; }
     if (!pronto) return;
     if (inRiproduzione) yt.pauseVideo(); else yt.playVideo();
   }
@@ -810,7 +1222,10 @@ const Player = (() => {
 
   function ferma() {
     if (pronto) yt.stopVideo();
-    coda = []; indice = -1; inRiproduzione = false;
+    loc().pause();
+    loc().removeAttribute('src');
+    if (urlLocale) { URL.revokeObjectURL(urlLocale); urlLocale = null; }
+    coda = []; indice = -1; inRiproduzione = false; motore = null;
     $('#player').hidden = true;
     $('#video').hidden = true;
     document.body.classList.remove('playing-ui', 'has-video');
@@ -818,8 +1233,8 @@ const Player = (() => {
 
   // aggiornamento della barra di avanzamento
   setInterval(() => {
-    if (!pronto || !corrente() || trascinando || !yt.getDuration) return;
-    const tot = yt.getDuration() || 0, ora = yt.getCurrentTime() || 0;
+    if (!motore || !corrente() || trascinando) return;
+    const tot = totale(), ora = tempo();
     if (tot > 0) {
       $('#seek').value = Math.round((ora / tot) * 1000);
       $('#t-tot').textContent = durata(tot);
@@ -828,6 +1243,12 @@ const Player = (() => {
   }, 500);
 
   function collega() {
+    const v = loc();
+    v.addEventListener('play', () => { if (motore === 'locale') quandoSuona(true); });
+    v.addEventListener('pause', () => { if (motore === 'locale') quandoSuona(false); });
+    v.addEventListener('ended', () => { if (motore === 'locale') { quandoSuona(false); successiva(true); } });
+    v.addEventListener('error', () => { if (motore === 'locale' && v.getAttribute('src')) erroreRiproduzione('non si riesce a riprodurre dal file scaricato'); });
+
     $('#btn-play').onclick = playPausa;
     $('#btn-next').onclick = () => successiva(false);
     $('#btn-prev').onclick = precedente;
@@ -840,24 +1261,19 @@ const Player = (() => {
     mostraVideo(videoVisibile, false);
 
     const seek = $('#seek');
-    seek.addEventListener('input', () => {
-      trascinando = true;
-      if (pronto && yt.getDuration) $('#t-cur').textContent = durata((seek.value / 1000) * yt.getDuration());
-    });
-    seek.addEventListener('change', () => {
-      if (pronto && yt.getDuration) yt.seekTo((seek.value / 1000) * yt.getDuration(), true);
-      trascinando = false;
-    });
+    seek.addEventListener('input', () => { trascinando = true; $('#t-cur').textContent = durata((seek.value / 1000) * totale()); });
+    seek.addEventListener('change', () => { vaiA((seek.value / 1000) * totale()); trascinando = false; });
 
     const vol = $('#volume');
     vol.value = leggiPref('volume', 70);
-    vol.addEventListener('input', () => { if (pronto) yt.setVolume(Number(vol.value)); salvaPref('volume', Number(vol.value)); });
+    impostaVolume(Number(vol.value));
+    vol.addEventListener('input', () => { impostaVolume(Number(vol.value)); salvaPref('volume', Number(vol.value)); });
 
     if ('mediaSession' in navigator) {
       const ms = navigator.mediaSession;
       try {
-        ms.setActionHandler('play', () => pronto && yt.playVideo());
-        ms.setActionHandler('pause', () => pronto && yt.pauseVideo());
+        ms.setActionHandler('play', () => { if (!inRiproduzione) playPausa(); });
+        ms.setActionHandler('pause', () => { if (inRiproduzione) playPausa(); });
         ms.setActionHandler('nexttrack', () => successiva(false));
         ms.setActionHandler('previoustrack', precedente);
       } catch { /* non supportato */ }
@@ -865,7 +1281,7 @@ const Player = (() => {
 
     // scorciatoie da tastiera (non mentre si scrive)
     document.addEventListener('keydown', e => {
-      if (e.target.closest('input, textarea, dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target.closest('input, textarea, select, dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.code === 'Space' && corrente()) { e.preventDefault(); playPausa(); }
       else if (e.key === 'n' || e.key === 'N') successiva(false);
       else if (e.key === 'p' || e.key === 'P') precedente();
@@ -890,7 +1306,16 @@ function mostraAuth(scheda = 'login') {
 
 async function entra(utente) {
   stato.utente = utente;
-  await caricaCatalogo();
+  await Offline.apri(utente.id).catch(() => {});
+  try {
+    await caricaCatalogo();
+  } catch (e) {
+    // offline e senza catalogo salvato: si possono comunque ascoltare i download
+    if (navigator.onLine) throw e;
+    stato.canzoni = []; stato.perId = new Map(); stato.preferiti = []; stato.playlist = [];
+    location.hash = '#/scaricati';
+  }
+  Download.controllaServer();
   $('#auth').hidden = true;
   $('#app').hidden = false;
   $('#who').textContent = utente.nickname;
@@ -902,6 +1327,8 @@ async function entra(utente) {
 
 function esciLocale() {
   stato.utente = null;
+  // i dati dell'account salvati per l'offline non devono restare per il prossimo utente
+  if ('caches' in window) caches.delete('ivibe-api').catch(() => {});
   Player.ferma();
   $('#content').replaceChildren();
   delete $('#content').dataset.vista;
@@ -946,9 +1373,19 @@ function collegaAuth() {
 
 // ===================== AVVIO =====================
 
+function aggiornaStatoRete() {
+  const offline = !navigator.onLine;
+  document.body.classList.toggle('offline', offline);
+  $('#offline-banner').hidden = !offline;
+}
+
 (async function avvio() {
   collegaAuth();
   Player.collega();
+  aggiornaStatoRete();
+  window.addEventListener('online', () => { aggiornaStatoRete(); toast('Di nuovo online'); if (stato.utente) caricaCatalogo().then(render).catch(() => {}); Download.controllaServer(); });
+  window.addEventListener('offline', () => { aggiornaStatoRete(); toast('Sei offline: puoi ascoltare le canzoni scaricate'); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.warn('service worker:', e));
   try {
     const d = await api('GET', '/api/me');
     if (d.utente) await entra(d.utente);

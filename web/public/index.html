@@ -8,7 +8,8 @@
   <meta name="theme-color" content="#140a24">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/logo-192.png">
-  <link rel="stylesheet" href="/app.css?v=3">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css?v=4">
 </head>
 <body>
   <noscript>iVibe ha bisogno di JavaScript per funzionare.</noscript>
@@ -78,6 +79,7 @@
         <a href="#/home" data-nav="home"><span class="ico">⌂</span><span>Home</span></a>
         <a href="#/preferiti" data-nav="preferiti"><span class="ico">♥</span><span>Preferiti</span></a>
         <a href="#/playlist" data-nav="playlist"><span class="ico">≡</span><span>Playlist</span></a>
+        <a href="#/scaricati" data-nav="scaricati"><span class="ico">↓</span><span>Scaricati</span><span class="nav-n" id="nav-scaricati-n"></span></a>
         <a href="#/admin" data-nav="admin" id="nav-admin" hidden><span class="ico">★</span><span>Admin</span></a>
         <a href="#/impostazioni" data-nav="impostazioni"><span class="ico">⚙</span><span>Impostazioni</span></a>
       </nav>
@@ -93,7 +95,7 @@
 
   <!-- Video YouTube: di default è nascosto (si sente solo l'audio), si mostra con il pulsante ▣ -->
   <section id="video" class="video" hidden aria-label="Video">
-    <div class="video-frame"><div id="yt"></div></div>
+    <div class="video-frame"><div id="yt"></div><video id="locale" playsinline preload="auto"></video></div>
     <div class="video-tools">
       <button class="btn-icon" id="btn-video-size" title="Ingrandisci / riduci" aria-label="Ingrandisci o riduci il video">⤢</button>
       <button class="btn-icon" id="btn-video-close" title="Nascondi video" aria-label="Nascondi video">✕</button>
@@ -146,7 +148,8 @@
 
   <div id="menu" class="menu" hidden role="menu"></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="offline-banner" class="offline-banner" hidden>Offline · puoi ascoltare le canzoni scaricate</div>
 
-  <script src="/app.js?v=3"></script>
+  <script src="/app.js?v=4"></script>
 </body>
 </html>

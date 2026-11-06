@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node web/server.js",
-    "test": "cd web && node --test"
+    "test": "cd web && node --test",
+    "postinstall": "node web/scripts/installa-ytdlp.js"
   },
   "engines": {
     "node": "22.x"

@@ -35,6 +35,29 @@ repository (le password sono salvate solo come hash).
   registrazioni, preferiti e playlist nuove (catalogo e account iniziali restano). Il pannello
   admin mostra un avviso quando è in questa modalità.
 
+### Download e ascolto offline
+- Accanto a ogni canzone c'è **↓**: il server la scarica da YouTube con **yt-dlp** e il browser la
+  salva sul dispositivo. Nella sezione **Scaricati** trovi tutto, puoi scegliere *solo audio*
+  (m4a, ~4 MB) o *video* (mp4 360p) e attivare "scarica in automatico quello che ascolti".
+- Le canzoni che YouTube non lascia riprodurre fuori dal suo sito (errore "impossibile
+  riprodurre fuori da YouTube") vengono scaricate e fatte partire da sole.
+- Senza internet il sito si apre lo stesso (service worker) e suonano le canzoni scaricate.
+  Sul telefono puoi "installarlo": menu del browser → *Aggiungi a schermata Home*.
+- I download partono in parallelo (3 dal browser, fino a 4 processi yt-dlp sul server).
+- yt-dlp viene scaricato in automatico da `npm install` (`web/bin/`) e aggiornato a ogni avvio.
+
+Variabili utili su Render (*Environment*):
+
+| Variabile | A cosa serve |
+|---|---|
+| `DOWNLOAD_ATTIVI=false` | spegne i download (restano solo lo streaming e i file già scaricati) |
+| `YTDLP_COOKIES` | se YouTube blocca il server ("Sign in to confirm you're not a bot"): incolla il contenuto di un `cookies.txt` esportato dal browser. Meglio usare un account secondario |
+| `DOWNLOAD_PARALLELI` | quanti yt-dlp insieme sul server (predefinito 4) |
+
+> ⚠ YouTube blocca spesso i download dai server cloud: se succede, i download funzionano
+> comunque avviando iVibe sul tuo PC (`npm install` e `npm start`). Scaricare da YouTube va
+> contro i suoi termini d'uso: tieni i download per uso personale e per il progetto.
+
 ### Provarlo sul tuo PC
 ```bash
 cd web

@@ -143,3 +143,54 @@ test('limite tentativi di login', async () => {
   for (let i = 0; i < 11; i++) ultimo = await api('POST', '/api/login', { login: 'admin', password: 'no' });
   assert.equal(ultimo.stato, 429);
 });
+
+// ---------- download (con un finto yt-dlp: in questi test non si va su YouTube) ----------
+const { test: test2 } = require('node:test');
+
+test2('download per l\'offline', { skip: process.platform === 'win32' }, async () => {
+  const cartella = fs.mkdtempSync(path.join(os.tmpdir(), 'ivibe-dl-'));
+  const finto = path.join(cartella, 'yt-dlp');
+  fs.writeFileSync(finto, `#!/bin/sh
+[ "$1" = "--version" ] && echo 2099.01.01 && exit 0
+while [ $# -gt 0 ]; do case "$1" in -o) OUT="$2"; shift 2;; --) ID="$2"; shift 2;; *) shift;; esac; done
+if [ "$ID" = "4NRXx6U8ABQ" ]; then echo "ERROR: [youtube] $ID: Sign in to confirm you're not a bot" >&2; exit 1; fi
+head -c 5000 /dev/zero > "$OUT"
+`, { mode: 0o755 });
+  const porta = PORTA + 100;
+  const base = `http://127.0.0.1:${porta}`;
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(porta), SEED_FILE: path.join(dir, 'seed.json'), DATA_FILE: path.join(cartella, 'dati.json'),
+      CACHE_DIR: path.join(cartella, 'cache'), YTDLP_PATH: finto, YTDLP_NO_UPDATE: '1', DATABASE_URL: '', SESSION_SECRET: 'test' },
+    stdio: 'ignore',
+  });
+  try {
+    for (let i = 0; i < 50; i++) {
+      try { if ((await fetch(base + '/healthz')).ok) break; } catch { /* attendo */ }
+      await new Promise(r => setTimeout(r, 100));
+    }
+    assert.equal((await fetch(base + '/api/scarica/1')).status, 401); // serve il login
+    const login = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'Admin123!' }) });
+    const cookie = login.headers.get('set-cookie').split(';')[0];
+    const stato = await (await fetch(base + '/api/scarica-stato', { headers: { Cookie: cookie } })).json();
+    assert.deepEqual(stato, { attivi: true, ytdlp: '2099.01.01' });
+
+    const r = await fetch(base + '/api/scarica/1?formato=audio', { headers: { Cookie: cookie } });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'audio/mp4');
+    assert.match(r.headers.get('content-disposition'), /A - Uno\.m4a/);
+    assert.equal((await r.arrayBuffer()).byteLength, 5000);
+    assert.ok(fs.existsSync(path.join(cartella, 'cache', 'JGwWNGJdvx8.m4a'))); // resta in cache
+
+    const v = await fetch(base + '/api/scarica/1?formato=video', { headers: { Cookie: cookie } });
+    assert.equal(v.headers.get('content-type'), 'video/mp4');
+    await v.arrayBuffer();
+
+    const bloccato = await fetch(base + '/api/scarica/2', { headers: { Cookie: cookie } });
+    assert.equal(bloccato.status, 503);
+    assert.match((await bloccato.json()).errore, /YouTube ha bloccato/);
+    assert.equal((await fetch(base + '/api/scarica/999', { headers: { Cookie: cookie } })).status, 404);
+  } finally {
+    srv.kill();
+    fs.rmSync(cartella, { recursive: true, force: true });
+  }
+});

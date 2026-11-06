@@ -10,6 +10,9 @@ const path = require('node:path');
 const archivio = require('./lib/archivio');
 const sic = require('./lib/sicurezza');
 const val = require('./lib/validatore');
+const scaricatore = require('./lib/scaricatore');
+
+const GIA_INVIATA = Symbol('risposta già inviata');
 
 const PORTA = parseInt(process.env.PORT || '3000', 10);
 const PRODUZIONE = process.env.NODE_ENV === 'production';
@@ -32,9 +35,12 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com https://s.ytimg.com",
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
-  "img-src 'self' https://i.ytimg.com data:",
+  "img-src 'self' https://i.ytimg.com data: blob:",
+  "media-src 'self' blob:",
+  "worker-src 'self'",
+  "manifest-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "connect-src 'self'",
+  "connect-src 'self' https://i.ytimg.com",
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
@@ -315,6 +321,45 @@ rotta('DELETE', '/api/admin/canzoni/:id', 'admin', async ({ p }) => {
   return { ok: true };
 });
 
+// ---- Download per l'ascolto offline ----
+
+function nomeFile(c, ext) {
+  const base = `${c.artista} - ${c.titolo}`.replace(/[\\/:*?"<>|\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return `${base || 'canzone'}.${ext}`;
+}
+
+// Interruttore: su Render metti DOWNLOAD_ATTIVI=false per spegnere i download
+const DOWNLOAD_ATTIVI = process.env.DOWNLOAD_ATTIVI !== 'false';
+
+rotta('GET', '/api/scarica/:id', 'utente', async ({ req, res, p }) => {
+  if (!DOWNLOAD_ATTIVI) throw new ErroreHttp(403, 'I download sono disattivati su questo sito');
+  const c = canzoneEsistente(p.id);
+  const formato = new URL(req.url, 'http://x').searchParams.get('formato') === 'video' ? 'video' : 'audio';
+  let file;
+  try {
+    file = await scaricatore.prepara(c.videoId, formato);
+  } catch (e) {
+    if (e instanceof scaricatore.ErroreDownload) throw new ErroreHttp(e.stato, e.message);
+    throw e;
+  }
+  if (req.destroyed) return GIA_INVIATA; // l'utente ha annullato mentre aspettava
+  const st = fs.statSync(file.percorso);
+  const nome = nomeFile(c, file.ext);
+  res.writeHead(200, {
+    'Content-Type': file.mime,
+    'Content-Length': st.size,
+    'Content-Disposition': `attachment; filename="${nome.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(nome)}`,
+    'Cache-Control': 'private, no-store',
+  });
+  fs.createReadStream(file.percorso).pipe(res);
+  return GIA_INVIATA;
+});
+
+rotta('GET', '/api/scarica-stato', 'utente', async () => ({
+  attivi: DOWNLOAD_ATTIVI,
+  ytdlp: DOWNLOAD_ATTIVI ? await scaricatore.versione() : null,
+}));
+
 rotta('GET', '/api/admin/utenti', 'admin', async () => ({
   utenti: archivio.utenti.tutti().map(u => ({ ...utentePubblico(u), creato: u.creato || null })),
   archivio: archivio.modalita(),
@@ -403,7 +448,7 @@ const server = http.createServer(async (req, res) => {
     if (corpo === null || typeof corpo !== 'object' || Array.isArray(corpo)) throw new ErroreHttp(400, 'Richiesta non valida');
 
     const risposta = await trovata.gestore({ req, res, utente, corpo, p: parametri });
-    inviaJson(res, 200, risposta);
+    if (risposta !== GIA_INVIATA) inviaJson(res, 200, risposta);
   } catch (e) {
     if (e instanceof ErroreHttp) return inviaJson(res, e.stato, { errore: e.message });
     console.error(e);
@@ -412,6 +457,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 archivio.inizializza().then(() => {
+  scaricatore.aggiornaInBackground();
+  scaricatore.versione().then(v => console.log(v ? `[iVibe] yt-dlp ${v}: download attivi` : '[iVibe] yt-dlp non trovato: download disattivati'));
   server.listen(PORTA, () => console.log(`[iVibe] in ascolto su http://localhost:${PORTA} (archivio: ${archivio.modalita()})`));
 }).catch(e => {
   console.error('[iVibe] avvio fallito:', e);
