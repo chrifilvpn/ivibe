@@ -71,6 +71,16 @@ async function api(metodo, url, corpo) {
     opzioni.headers['Content-Type'] = 'application/json';
     opzioni.body = JSON.stringify(corpo);
   }
+  // App Android: niente server, risponde l'archivio nel telefono (locale.js)
+  if (APP) {
+    const { stato: st, dati: j } = await window.LocaleAPI.richiesta(metodo, url, corpo);
+    if (st === 401 && stato.utente && !url.startsWith('/api/login') && !url.startsWith('/api/account')) {
+      toast('Sessione scaduta: rifai il login', true);
+      esciLocale();
+    }
+    if (st >= 400) throw new Error(j.errore || `Errore ${st}`);
+    return j;
+  }
   const daSalvare = metodo === 'GET' && SALVA_OFFLINE.includes(url);
   let r;
   try {
@@ -312,11 +322,41 @@ const Download = (() => {
 
   function formato() { return leggiPref('formato', 'audio'); }
 
+  /** App Android: scarica con yt-dlp dentro il telefono (plugin nativo YtDlp). */
+  async function eseguiNelTelefono(c, st, fmt) {
+    const plugin = window.Capacitor.Plugins.YtDlp;
+    const ascolto = await plugin.addListener('progresso', ev => {
+      if (ev.id !== String(c.id)) return;
+      st.fase = 'scarico';
+      st.perc = Math.max(0, Math.min(99, Math.round(ev.perc)));
+      aggiornaUI();
+    });
+    st.annullaNativo = () => plugin.annulla({ id: String(c.id) }).catch(() => {});
+    try {
+      const { path } = await plugin.scarica({ id: String(c.id), videoId: c.videoId, formato: fmt });
+      if (st.ctrl.signal.aborted) throw Object.assign(new Error('annullato'), { name: 'AbortError' });
+      const r = await fetch(window.Capacitor.convertFileSrc(path));
+      const blob = await r.blob();
+      await Offline.salva(c, fmt, new Blob([blob], { type: fmt === 'video' ? 'video/mp4' : 'audio/mp4' }));
+      plugin.elimina({ path }).catch(() => {});
+    } catch (e) {
+      if (e.name === 'AbortError' || st.ctrl.signal.aborted) throw Object.assign(new Error('annullato'), { name: 'AbortError' });
+      const m = String(e.message || e);
+      if (/Sign in to confirm|not a bot|429/i.test(m)) throw new Error('YouTube chiede una verifica: riprova più tardi');
+      if (/unavailable|Private video|removed/i.test(m)) throw new Error('Questo video non è più disponibile su YouTube');
+      if (/Unable to resolve host|network|timed out|resolve/i.test(m)) throw new Error('Serve internet per scaricare');
+      throw new Error('Download non riuscito: ' + m.split('\n').filter(Boolean).pop().slice(0, 140));
+    } finally {
+      ascolto.remove();
+    }
+  }
+
   async function esegui(c) {
     const st = stati.get(c.id);
     st.fase = 'preparazione';
     aggiornaUI();
     const fmt = formato();
+    if (APP) return eseguiNelTelefono(c, st, fmt);
     const r = await fetch(`${server()}/api/scarica/${c.id}?formato=${fmt}`, { credentials: credenziali(), headers: intestazioniAuth(), signal: st.ctrl.signal });
     if (!r.ok) {
       let msg = `Errore ${r.status}`;
@@ -360,7 +400,7 @@ const Download = (() => {
       if (e.name !== 'AbortError') {
         const silenzioso = stati.get(c.id)?.silenzioso;
         // se YouTube blocca il server è inutile continuare: stop ai download automatici per 10 minuti
-        if (/bloccato|disattivati|non è installato/.test(e.message)) {
+        if (/bloccato|disattivati|non è installato|verifica/.test(e.message)) {
           if (Date.now() > pausaFino) toast(e.message, true);
           pausaFino = Date.now() + 10 * 60 * 1000;
           for (const x of coda.splice(0)) {
@@ -412,6 +452,7 @@ const Download = (() => {
     const st = stati.get(id);
     if (!st) return;
     st.ctrl.abort();
+    if (st.annullaNativo) st.annullaNativo();
     const i = coda.findIndex(x => x.id === id);
     if (i !== -1) coda.splice(i, 1);
     stati.delete(id);
@@ -1409,7 +1450,7 @@ function collegaAuth() {
     } catch (ex) { err.textContent = ex.message; } finally { btn.disabled = false; }
   });
 
-  if (APP) {
+  if (false) { // (indirizzo del server: non serve più, l'app è autonoma)
     const etichetta = h('span');
     const aggiornaEtichetta = () => { etichetta.textContent = server().replace(/^https?:\/\//, ''); };
     aggiornaEtichetta();
