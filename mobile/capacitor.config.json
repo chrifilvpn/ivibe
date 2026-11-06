@@ -9,5 +9,9 @@
   "android": {
     "allowMixedContent": true,
     "backgroundColor": "#120a1f"
+  },
+  "ios": {
+    "backgroundColor": "#120a1f",
+    "contentInset": "never"
   }
 }

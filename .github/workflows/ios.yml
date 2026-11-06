@@ -1,0 +1,63 @@
+# Costruisce l'app iPhone (.ipa NON firmata) su un Mac di GitHub e la pubblica nella Release "ios".
+# Si installa sull'iPhone con Sideloadly (o AltStore) usando il proprio ID Apple: vedi README.
+name: App iPhone
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/public/**', 'mobile/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prepara il progetto Capacitor
+        working-directory: mobile
+        run: |
+          npm install
+          node scripts/prepara-www.js
+          npx cap add ios
+          ./scripts/prepara-ios.sh
+          npx cap sync ios
+
+      - name: Costruisci l'app (senza firma)
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -40
+          test -d "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+
+      - name: Crea il file .ipa
+        run: |
+          mkdir -p Payload
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" Payload/
+          zip -qry iVibe.ipa Payload
+          ls -la iVibe.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iVibe-ipa
+          path: iVibe.ipa
+
+      - name: Pubblica nella Release "ios"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios
+          name: iVibe per iPhone
+          body: |
+            **iVibe.ipa** non è firmata: si installa con Sideloadly (Windows/Mac) usando il proprio ID Apple.
+            Istruzioni nel README. Versione costruita dal commit ${{ github.sha }}.
+          files: iVibe.ipa
+          make_latest: false
