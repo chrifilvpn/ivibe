@@ -1,0 +1,60 @@
+# Costruisce l'app Android (APK) a ogni modifica dell'interfaccia e la pubblica
+# nella Release "android": https://github.com/<utente>/ivibe/releases/tag/android
+name: App Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/public/**', 'mobile/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Prepara il progetto Capacitor
+        working-directory: mobile
+        run: |
+          npm install
+          node scripts/prepara-www.js
+          npx cap add android
+          ./scripts/icone.sh
+          npx cap sync android
+
+      - name: Costruisci l'APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../../iVibe.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iVibe-apk
+          path: iVibe.apk
+
+      - name: Pubblica nella Release "android"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: iVibe per Android
+          body: |
+            Scarica **iVibe.apk** qui sotto dal telefono Android e aprilo per installarlo
+            (la prima volta Android chiede di consentire l'installazione da questa app/browser).
+            Versione costruita dal commit ${{ github.sha }}.
+          files: iVibe.apk
+          make_latest: true

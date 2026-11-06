@@ -137,6 +137,24 @@ test('i dati vengono salvati su file', async () => {
   assert.ok(!salvati.utenti.find(u => u.nickname === 'mario'));
 });
 
+test('app Android: token e CORS', async () => {
+  const pre = await fetch(BASE + '/api/login', { method: 'OPTIONS', headers: { Origin: 'https://localhost', 'Access-Control-Request-Method': 'POST' } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), 'https://localhost');
+  const estraneo = await fetch(BASE + '/api/me', { headers: { Origin: 'https://sito-cattivo.example' } });
+  assert.equal(estraneo.headers.get('access-control-allow-origin'), null);
+
+  const r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://localhost' },
+    body: JSON.stringify({ login: 'admin', password: 'Admin123!', app: true }) });
+  const j = await r.json();
+  assert.ok(j.token);
+  const sito = await (await fetch(BASE + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'Admin123!' }) })).json();
+  assert.equal(sito.token, undefined); // il sito non riceve il token (resta nel cookie HttpOnly)
+  const cat = await fetch(BASE + '/api/catalogo', { headers: { Authorization: 'Bearer ' + j.token } });
+  assert.equal(cat.status, 200);
+  assert.equal((await fetch(BASE + '/api/catalogo', { headers: { Authorization: 'Bearer falso.token' } })).status, 401);
+});
+
 test('limite tentativi di login', async () => {
   const api = client();
   let ultimo;

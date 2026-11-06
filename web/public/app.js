@@ -46,23 +46,50 @@ function toast(msg, errore = false) {
   setTimeout(() => t.remove(), errore ? 4500 : 2600);
 }
 
+// ===================== APP (Android) O SITO =====================
+// Nell'app Android l'interfaccia sta dentro il telefono e parla con il server via internet:
+// serve l'indirizzo del server e un token al posto del cookie.
+
+const APP = window.IVIBE_APP === true ||
+  !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+const SERVER_PREDEFINITO = 'https://ivibe.onrender.com';
+const server = () => (APP ? String(leggiPref('server', SERVER_PREDEFINITO) || '').replace(/\/+$/, '') : '');
+function intestazioniAuth() {
+  const t = APP ? leggiPref('token', null) : null;
+  return t ? { Authorization: 'Bearer ' + t } : {};
+}
+const credenziali = () => (APP ? 'omit' : 'same-origin');
+
+// Ultime risposte salvate: senza campo l'app si apre lo stesso con catalogo e playlist
+const SALVA_OFFLINE = ['/api/me', '/api/catalogo'];
+function dimenticaCacheOffline() { for (const u of SALVA_OFFLINE) salvaPref('cache:' + u, null); }
+
 async function api(metodo, url, corpo) {
-  const opzioni = { method: metodo, credentials: 'same-origin', headers: {} };
+  const opzioni = { method: metodo, credentials: credenziali(), headers: { ...intestazioniAuth() } };
   if (corpo !== undefined) {
+    if (APP && /^\/api\/(login|registrazione|account\/password)$/.test(url)) corpo = { ...corpo, app: true };
     opzioni.headers['Content-Type'] = 'application/json';
     opzioni.body = JSON.stringify(corpo);
   }
+  const daSalvare = metodo === 'GET' && SALVA_OFFLINE.includes(url);
   let r;
-  try { r = await fetch(url, opzioni); } catch {
+  try {
+    r = await fetch(server() + url, opzioni);
+  } catch {
+    const salvata = daSalvare ? leggiPref('cache:' + url, null) : null;
+    if (salvata) { document.body.classList.add('senza-server'); return salvata; }
     throw new Error(navigator.onLine ? 'Connessione al server non riuscita' : 'Sei offline: questa operazione richiede internet');
   }
   let j = {};
   try { j = await r.json(); } catch { /* risposta vuota */ }
+  if (r.status === 503 && daSalvare && leggiPref('cache:' + url, null)) return leggiPref('cache:' + url, null); // service worker offline
   if (r.status === 401 && stato.utente && !url.startsWith('/api/login') && !url.startsWith('/api/account')) {
     toast('Sessione scaduta: rifai il login', true);
     esciLocale();
   }
   if (!r.ok) throw new Error(j.errore || `Errore ${r.status}`);
+  if (APP && j.token) salvaPref('token', j.token);
+  if (daSalvare && !(url === '/api/me' && !j.utente)) { salvaPref('cache:' + url, j); document.body.classList.remove('senza-server'); }
   return j;
 }
 
@@ -290,7 +317,7 @@ const Download = (() => {
     st.fase = 'preparazione';
     aggiornaUI();
     const fmt = formato();
-    const r = await fetch(`/api/scarica/${c.id}?formato=${fmt}`, { credentials: 'same-origin', signal: st.ctrl.signal });
+    const r = await fetch(`${server()}/api/scarica/${c.id}?formato=${fmt}`, { credentials: credenziali(), headers: intestazioniAuth(), signal: st.ctrl.signal });
     if (!r.ok) {
       let msg = `Errore ${r.status}`;
       try { msg = (await r.json()).errore || msg; } catch { /* niente */ }
@@ -521,7 +548,7 @@ function menuCanzone(btn, c) {
   } else if (Download.disponibili()) {
     voci.push('-', { testo: '↓ Scarica per ascoltare offline', azione: () => Download.scarica(c) });
   }
-  if (Download.disponibili() && navigator.onLine) {
+  if (!APP && Download.disponibili() && navigator.onLine) {
     voci.push({ testo: `Salva il file sul dispositivo (.${Download.formato() === 'video' ? 'mp4' : 'm4a'})`, azione: () => salvaFile(c) });
   }
   voci.push({ testo: 'Apri su YouTube ↗', azione: () => window.open(`https://www.youtube.com/watch?v=${c.videoId}`, '_blank', 'noopener') });
@@ -1079,7 +1106,7 @@ const Player = (() => {
             if (motore !== 'yt') return;
             const c = corrente();
             // 101/150 = il proprietario non permette di vederlo fuori da YouTube: lo scarichiamo noi
-            if ((e.data === 101 || e.data === 150 || e.data === 5) && c && Download.disponibili() && navigator.onLine) {
+            if (e.data !== 100 && c && Download.disponibili() && navigator.onLine) {
               suonaDopoDownload(c);
               return;
             }
@@ -1320,6 +1347,7 @@ function mostraAuth(scheda = 'login') {
 
 async function entra(utente) {
   stato.utente = utente;
+  salvaPref('cache:/api/me', { utente }); // per riaprire l'app anche senza campo
   await Offline.apri(utente.id).catch(() => {});
   try {
     await caricaCatalogo();
@@ -1341,6 +1369,8 @@ async function entra(utente) {
 
 function esciLocale() {
   stato.utente = null;
+  dimenticaCacheOffline();
+  if (APP) salvaPref('token', null);
   // i dati dell'account salvati per l'offline non devono restare per il prossimo utente
   if ('caches' in window) caches.delete('ivibe-api').catch(() => {});
   Player.ferma();
@@ -1379,10 +1409,36 @@ function collegaAuth() {
     } catch (ex) { err.textContent = ex.message; } finally { btn.disabled = false; }
   });
 
+  if (APP) {
+    const etichetta = h('span');
+    const aggiornaEtichetta = () => { etichetta.textContent = server().replace(/^https?:\/\//, ''); };
+    aggiornaEtichetta();
+    $('.auth-card').append(h('p', { class: 'server-app' }, 'Server: ', etichetta, ' · ',
+      h('button', { type: 'button', class: 'link', text: 'cambia', onclick: () => dialogo({
+        titolo: 'Indirizzo del server', testo: 'Il computer o il sito dove gira iVibe (es. https://ivibe.onrender.com oppure http://192.168.1.20:3000).',
+        campi: [{ name: 'server', label: 'Indirizzo', value: server(), max: 200 }], ok: 'Salva',
+        azione: async v => {
+          let url = v.server.trim().replace(/\/+$/, '');
+          if (!/^https?:\/\//.test(url)) url = 'https://' + url;
+          const r = await fetch(url + '/healthz').catch(() => null);
+          if (!r || !r.ok) throw new Error('Server non raggiungibile a questo indirizzo');
+          salvaPref('server', url);
+        },
+      }).then(r => { if (r) { aggiornaEtichetta(); toast('Server salvato ✓'); controllaRegistrazioni(); } }) })));
+  }
+
   invia($('#form-login'), '/api/login', ['login', 'password']);
   invia($('#form-registrazione'), '/api/registrazione', ['nickname', 'email', 'dataNascita', 'password', 'conferma']);
   $('#form-registrazione').elements.dataNascita.max = new Date().toISOString().slice(0, 10);
   $('#btn-logout').addEventListener('click', logout);
+}
+
+async function controllaRegistrazioni() {
+  try {
+    const info = await api('GET', '/api/info');
+    const tab = document.querySelector('[data-auth-tab="registrazione"]');
+    tab.hidden = info.registrazioni === false;
+  } catch { /* server non raggiungibile: lascio com'è */ }
 }
 
 // ===================== AVVIO =====================
@@ -1399,7 +1455,9 @@ function aggiornaStatoRete() {
   aggiornaStatoRete();
   window.addEventListener('online', () => { aggiornaStatoRete(); toast('Di nuovo online'); if (stato.utente) caricaCatalogo().then(render).catch(() => {}); Download.controllaServer(); });
   window.addEventListener('offline', () => { aggiornaStatoRete(); toast('Sei offline: puoi ascoltare le canzoni scaricate'); });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.warn('service worker:', e));
+  if (APP) document.body.classList.add('app');
+  else if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.warn('service worker:', e));
+  controllaRegistrazioni();
   try {
     const d = await api('GET', '/api/me');
     if (d.utente) await entra(d.utente);

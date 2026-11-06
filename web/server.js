@@ -127,6 +127,17 @@ function rotta(metodo, percorso, livello, gestore) {
 
 // ---- Account ----
 
+// L'app Android non usa i cookie: riceve il token e lo manda nell'intestazione Authorization.
+// Il token viene dato solo se lo chiede l'app (sul sito resta solo nel cookie HttpOnly).
+function tokenPerApp(req, corpo, utente) {
+  return corpo.app === true || (req.headers.authorization || '').startsWith('Bearer ')
+    ? { token: sic.creaToken(utente) } : {};
+}
+
+// REGISTRAZIONI=false: nessuno può creare nuovi account (iVibe "solo per me")
+const REGISTRAZIONI_APERTE = process.env.REGISTRAZIONI !== 'false';
+rotta('GET', '/api/info', 'pubblico', async () => ({ registrazioni: REGISTRAZIONI_APERTE, nome: 'iVibe' }));
+
 rotta('GET', '/api/me', 'pubblico', async ({ utente }) => ({ utente: utente ? utentePubblico(utente) : null }));
 
 rotta('POST', '/api/login', 'pubblico', async ({ req, res, corpo }) => {
@@ -144,10 +155,11 @@ rotta('POST', '/api/login', 'pubblico', async ({ req, res, corpo }) => {
   }
   sic.azzeraTentativi(ip);
   impostaSessione(res, u);
-  return { utente: utentePubblico(u) };
+  return { utente: utentePubblico(u), ...tokenPerApp(req, corpo, u) };
 });
 
-rotta('POST', '/api/registrazione', 'pubblico', async ({ res, corpo }) => {
+rotta('POST', '/api/registrazione', 'pubblico', async ({ req, res, corpo }) => {
+  if (!REGISTRAZIONI_APERTE) throw new ErroreHttp(403, 'Le registrazioni sono chiuse');
   const nickname = typeof corpo.nickname === 'string' ? corpo.nickname.trim() : '';
   const email = typeof corpo.email === 'string' ? corpo.email.trim() : '';
   const { password, conferma, dataNascita } = corpo;
@@ -159,7 +171,7 @@ rotta('POST', '/api/registrazione', 'pubblico', async ({ res, corpo }) => {
 
   const u = archivio.utenti.crea({ nickname, email, password: sic.hashPassword(password), dataNascita });
   impostaSessione(res, u);
-  return { utente: utentePubblico(u) };
+  return { utente: utentePubblico(u), ...tokenPerApp(req, corpo, u) };
 });
 
 rotta('POST', '/api/logout', 'pubblico', async ({ res }) => {
@@ -167,14 +179,14 @@ rotta('POST', '/api/logout', 'pubblico', async ({ res }) => {
   return { ok: true };
 });
 
-rotta('POST', '/api/account/password', 'utente', async ({ res, utente, corpo }) => {
+rotta('POST', '/api/account/password', 'utente', async ({ req, res, utente, corpo }) => {
   if (!sic.verificaPassword(corpo.attuale || '', utente.password)) throw new ErroreHttp(400, 'Password attuale errata');
   if (corpo.nuova === corpo.attuale) throw new ErroreHttp(400, 'La nuova password è uguale a quella attuale');
   const errore = val.controllaPassword(corpo.nuova);
   if (errore) throw new ErroreHttp(400, errore);
   archivio.utenti.aggiorna(utente, { password: sic.hashPassword(corpo.nuova) });
   impostaSessione(res, utente); // le altre sessioni aperte decadono
-  return { ok: true };
+  return { ok: true, ...tokenPerApp(req, corpo, utente) };
 });
 
 rotta('POST', '/api/account/elimina', 'utente', async ({ res, utente, corpo }) => {
@@ -383,6 +395,26 @@ rotta('DELETE', '/api/admin/utenti/:id', 'admin', async ({ utente, p }) => {
   return { ok: true };
 });
 
+// ===================== CORS (app Android / iPhone) =====================
+// L'app gira su un'"origine" diversa dal server (https://localhost dentro il telefono),
+// quindi il browser interno chiede il permesso prima delle richieste.
+
+const ORIGINI_APP = new Set(['https://localhost', 'capacitor://localhost', 'http://localhost',
+  ...(process.env.APP_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)]);
+
+function cors(req, res) {
+  const origine = req.headers.origin;
+  if (!origine || !ORIGINI_APP.has(origine)) return false;
+  res.setHeader('Access-Control-Allow-Origin', origine);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Content-Disposition');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return true; }
+  return false;
+}
+
 // ===================== FILE STATICI =====================
 
 function serviStatico(req, res, percorso) {
@@ -419,6 +451,9 @@ const server = http.createServer(async (req, res) => {
   intestazioniSicurezza(res);
   const { pathname } = new URL(req.url, 'http://localhost');
 
+  if (pathname === '/healthz' || pathname.startsWith('/api/')) {
+    if (cors(req, res)) return; // risposta alla richiesta preliminare (OPTIONS)
+  }
   if (pathname === '/healthz') return inviaJson(res, 200, { ok: true });
 
   if (!pathname.startsWith('/api/')) {
@@ -438,7 +473,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (!trovata) throw new ErroreHttp(metodoSbagliato ? 405 : 404, 'Rotta non trovata');
 
-    const utente = sic.leggiToken(leggiCookie(req)[NOME_COOKIE], id => archivio.utenti.perId(id));
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : leggiCookie(req)[NOME_COOKIE];
+    const utente = sic.leggiToken(token, id => archivio.utenti.perId(id));
     if (trovata.livello !== 'pubblico' && !utente) throw new ErroreHttp(401, 'Devi fare il login');
     if (trovata.livello === 'admin' && !utente.isAdmin) throw new ErroreHttp(403, 'Solo per admin');
 

@@ -1,0 +1,13 @@
+{
+  "appId": "it.badoni.ivibe",
+  "appName": "iVibe",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#120a1f"
+  }
+}
