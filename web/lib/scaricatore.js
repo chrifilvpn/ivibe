@@ -34,6 +34,8 @@ function trovaYtDlp() {
   const candidati = [
     process.env.YTDLP_PATH,
     path.join(__dirname, '..', 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
+    // su Windows va bene anche quello incluso nell'app desktop (così non serve installare niente)
+    process.platform === 'win32' ? path.join(__dirname, '..', '..', 'src', 'ivibe', 'resources', 'tools', 'yt-dlp.exe') : null,
   ].filter(Boolean);
   for (const c of candidati) if (fs.existsSync(c)) return (eseguibile = c);
   return (eseguibile = 'yt-dlp'); // installato nel sistema (es. sudo apt install yt-dlp)
