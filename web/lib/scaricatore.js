@@ -40,6 +40,8 @@ function trovaYtDlp() {
 }
 
 /** Versione di yt-dlp, oppure null se non c'è. */
+const usaCookie = () => fs.existsSync(FILE_SEGRETO) || !!process.env.YTDLP_COOKIES;
+
 function versione() {
   return new Promise(resolve => {
     execFile(trovaYtDlp(), ['--version'], { timeout: 15000 }, (err, out) => resolve(err ? null : out.trim()));
@@ -61,8 +63,21 @@ function aggiornaInBackground() {
 // passare i cookie di un account YouTube nella variabile YTDLP_COOKIES
 // (contenuto del file cookies.txt in formato Netscape).
 
+// In alternativa (più comodo) su Render: Environment > Secret Files > file "cookies.txt",
+// che Render mette in /etc/secrets/cookies.txt.
+const FILE_SEGRETO = process.env.YTDLP_COOKIES_FILE || '/etc/secrets/cookies.txt';
+
 let fileCookie = null;
 function argomentiCookie() {
+  if (fs.existsSync(FILE_SEGRETO)) {
+    // yt-dlp riscrive il file dei cookie: /etc/secrets è di sola lettura, quindi uso una copia
+    if (!fileCookie) {
+      fileCookie = path.join(os.tmpdir(), 'ivibe-cookies.txt');
+      fs.copyFileSync(FILE_SEGRETO, fileCookie);
+      fs.chmodSync(fileCookie, 0o600);
+    }
+    return ['--cookies', fileCookie];
+  }
   const c = process.env.YTDLP_COOKIES;
   if (!c) return [];
   if (!fileCookie) {
@@ -191,4 +206,4 @@ async function prepara(videoId, formato) {
   return { percorso: finale, mime, ext };
 }
 
-module.exports = { prepara, versione, aggiornaInBackground, ErroreDownload, FORMATI };
+module.exports = { prepara, versione, usaCookie, aggiornaInBackground, ErroreDownload, FORMATI };

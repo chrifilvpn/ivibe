@@ -458,7 +458,9 @@ const server = http.createServer(async (req, res) => {
 
 archivio.inizializza().then(() => {
   scaricatore.aggiornaInBackground();
-  scaricatore.versione().then(v => console.log(v ? `[iVibe] yt-dlp ${v}: download attivi` : '[iVibe] yt-dlp non trovato: download disattivati'));
+  scaricatore.versione().then(v => console.log(v
+    ? `[iVibe] yt-dlp ${v}: download attivi${scaricatore.usaCookie() ? ' (con cookie YouTube)' : ' (senza cookie)'}`
+    : '[iVibe] yt-dlp non trovato: download disattivati'));
   server.listen(PORTA, () => console.log(`[iVibe] in ascolto su http://localhost:${PORTA} (archivio: ${archivio.modalita()})`));
 }).catch(e => {
   console.error('[iVibe] avvio fallito:', e);

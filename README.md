@@ -51,8 +51,16 @@ Variabili utili su Render (*Environment*):
 | Variabile | A cosa serve |
 |---|---|
 | `DOWNLOAD_ATTIVI=false` | spegne i download (restano solo lo streaming e i file già scaricati) |
-| `YTDLP_COOKIES` | se YouTube blocca il server ("Sign in to confirm you're not a bot"): incolla il contenuto di un `cookies.txt` esportato dal browser. Meglio usare un account secondario |
+| Secret File `cookies.txt` | se YouTube blocca il server ("YouTube ha bloccato il download"): *Environment → Secret Files → Add*, nome `cookies.txt`, contenuto = file esportato dal browser (vedi sotto). In alternativa la variabile `YTDLP_COOKIES` con lo stesso contenuto |
 | `DOWNLOAD_PARALLELI` | quanti yt-dlp insieme sul server (predefinito 4) |
+
+**Esportare i cookie di YouTube** (usa un account Google *secondario*, non il tuo principale):
+1. In Chrome installa l'estensione **Get cookies.txt LOCALLY**.
+2. Apri una finestra in incognito, consenti l'estensione in incognito, accedi a YouTube con l'account secondario.
+3. Su youtube.com apri l'estensione → **Export** (formato Netscape) → salva `cookies.txt`.
+4. Chiudi la finestra in incognito *senza uscire* dall'account (se esci, i cookie smettono di valere).
+5. Su Render carica il file come Secret File `cookies.txt` e fai *Manual Deploy*. Nel log deve
+   comparire `download attivi (con cookie YouTube)`.
 
 > ⚠ YouTube blocca spesso i download dai server cloud: se succede, i download funzionano
 > comunque avviando iVibe sul tuo PC (`npm install` e `npm start`). Scaricare da YouTube va
