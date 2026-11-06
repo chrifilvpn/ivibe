@@ -111,7 +111,21 @@ Serve Node 20 o più recente. Senza `DATABASE_URL` i dati vanno in `web/data/ivi
 - L'interfaccia è dentro l'app: **senza campo si apre lo stesso** (catalogo, playlist e
   preferiti dell'ultima volta) e suonano le canzoni scaricate.
 
-### iPhone: web app dalla schermata Home
+### iPhone: app vera (.ipa) con Sideloadly
+GitHub costruisce l'app su un Mac (workflow [`ios.yml`](.github/workflows/ios.yml)) e la pubblica in
+**https://github.com/chrifilvpn/ivibe/releases/download/ios/iVibe.ipa** (non firmata).
+Per installarla serve un PC (Windows o Mac) e un ID Apple gratuito:
+1. Sul PC installa **iTunes** e **iCloud** dal sito Apple (non dal Microsoft Store) e **Sideloadly** (sideloadly.io).
+2. Collega l'iPhone con il cavo, sblocca il telefono e tocca *Autorizza*.
+3. In Sideloadly trascina `iVibe.ipa`, scrivi il tuo ID Apple e premi **Start** (ti chiede la password Apple).
+4. Sull'iPhone: *Impostazioni → Generali → VPN e gestione dispositivi* → tocca il tuo ID Apple → **Autorizza**.
+5. Da iOS 16: *Impostazioni → Privacy e sicurezza → Modalità sviluppatore* → attiva e riavvia.
+
+Con un ID Apple gratuito l'app **scade dopo 7 giorni**: si rinnova rifacendo il punto 3 (le canzoni
+scaricate restano) oppure attivando in Sideloadly il rinnovo automatico. Con l'account sviluppatore
+Apple a pagamento (99 €/anno) dura un anno.
+
+### iPhone, in alternativa: web app dalla schermata Home
 Un'app iOS "vera" richiede un Mac con Xcode e un account Apple sviluppatore. Senza Mac:
 apri il sito in **Safari** → **Condividi** → **Aggiungi alla schermata Home**. Si apre a
 schermo intero, funziona senza campo e suona le canzoni scaricate. Su iPhone la musica può
