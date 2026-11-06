@@ -66,6 +66,13 @@ Variabili utili su Render (*Environment*):
 > comunque avviando iVibe sul tuo PC (`npm install` e `npm start`). Scaricare da YouTube va
 > contro i suoi termini d'uso: tieni i download per uso personale e per il progetto.
 
+### Usarlo su un PC senza essere amministratore (es. a scuola)
+1. Scarica lo ZIP del progetto ed estrailo.
+2. Scarica **node.exe** da https://nodejs.org/dist/latest-v22.x/win-x64/node.exe e mettilo nella
+   cartella del progetto, accanto a `avvia-windows.bat`.
+3. Doppio clic su `avvia-windows.bat`: si apre `http://localhost:3000`.
+   Non serve installare niente: yt-dlp è già nel progetto e si aggiorna da solo.
+
 ### Provarlo sul tuo PC
 ```bash
 cd web
