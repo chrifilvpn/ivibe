@@ -32,12 +32,29 @@ function caricaSeed() {
   d.canzoni = seed.canzoni;
   d.preferiti = seed.preferiti || {};
   d.playlist = seed.playlist || [];
+  d.versionePassword = seed.versionePassword || 0;
   d.prossimiId = {
     utente: Math.max(0, ...d.utenti.map(u => u.id)) + 1,
     canzone: Math.max(0, ...d.canzoni.map(c => c.id)) + 1,
     playlist: Math.max(0, ...d.playlist.map(p => p.id)) + 1,
   };
   return d;
+}
+
+// Se seed.json ha una "versionePassword" più nuova di quella salvata, le password degli
+// account iniziali vengono riportate a quelle del seed (anche se i dati sono già su Postgres).
+function allineaPasswordSeed() {
+  let seed;
+  try { seed = JSON.parse(fs.readFileSync(FILE_SEED, 'utf8')); } catch { return false; }
+  const v = seed.versionePassword || 0;
+  if (v <= (dati.versionePassword || 0)) return false;
+  for (const s of seed.utenti) {
+    const u = dati.utenti.find(x => x.id === s.id && x.nickname === s.nickname);
+    if (u) u.password = s.password;
+  }
+  dati.versionePassword = v;
+  console.log('[iVibe] password degli account iniziali aggiornate dal seed');
+  return true;
 }
 
 async function inizializza() {
@@ -58,6 +75,7 @@ async function inizializza() {
       modalita = 'postgres';
       if (r.rows.length) {
         dati = r.rows[0].dati;
+        if (allineaPasswordSeed()) await scriviOra();
       } else {
         dati = caricaSeed();
         await scriviOra();
@@ -75,6 +93,7 @@ async function inizializza() {
   try {
     dati = JSON.parse(fs.readFileSync(FILE_DATI, 'utf8'));
     console.log('[iVibe] dati letti da', FILE_DATI);
+    if (allineaPasswordSeed()) await scriviOra();
   } catch {
     dati = caricaSeed();
     console.log('[iVibe] archivio nuovo creato dal seed');

@@ -65,10 +65,10 @@ CREATE TABLE playlist_canzoni (
 
 -- Password cifrate con PBKDF2 (le password in chiaro NON sono nel repository)
 INSERT INTO utenti (id, nickname, email, password, data_nascita, is_admin) VALUES
-(1, 'ivibe_admin', 'ivibe_admin@ivibe.local', 'pbkdf2$65536$E0+e2QnpS1NHzk3ogbOJzQ==$ej2KWVkJQJ1594RLkFlL38K+ADIhHqz/3hOEURhEt5A=', '2026-04-11', TRUE),
-(2, 'iVibe_admin1', 'ivibe_admin1@ivibe.local', 'pbkdf2$65536$wfHx3SZVQM8UpeZuNw8rcA==$hw//BjJAeKxMdwUNkWYGVoIpN960QRatfl6kluIszkg=', '2026-04-11', TRUE),
-(4, 'phippomiao', 'phippomiao@gmail.com', 'pbkdf2$65536$Q5tDCbPc7poNkTb5nZDtfQ==$WkbXjp0rN9LzV1GS3KpMl9mZug9+Z8eCdcESNORKDRc=', '2008-05-12', FALSE),
-(5, 'Zigga', 'zigga@gmail.com', 'pbkdf2$65536$Jh2f3GIuVXxd5FcOn81qpw==$G3yDoK0JVbhsI20G2+wLRjj352cIGlv4+tea3ewYLy8=', '2007-08-14', FALSE);
+(1, 'ivibe_admin', 'ivibe_admin@ivibe.local', 'pbkdf2$65536$iuDdNRuOUTO8l4NiGhXGkA==$JKQ0aI99rhwBifMCZrS44Xhseq5SiHv1FLKYQkt65Wg=', '2026-04-11', TRUE),
+(2, 'iVibe_admin1', 'ivibe_admin1@ivibe.local', 'pbkdf2$65536$7htTqME/EWw6JBq0Vu6h9A==$WN8nIRfM5RByL4hG/lT4rJv54STDfTUMFmxwvz1ytbo=', '2026-04-11', TRUE),
+(4, 'phippomiao', 'phippomiao@gmail.com', 'pbkdf2$65536$Q6d3+cXHOrBHMTtHIuF4EQ==$NpJIpdeSUxTHYaGHsahPAJLED68A6OZKxtv57Cc/jq8=', '2008-05-12', FALSE),
+(5, 'Zigga', 'zigga@gmail.com', 'pbkdf2$65536$JugT8xqDeTHGt4xOuMy4FQ==$5uoya1+yGElR90J4h0uxN3IfgAD5MoP79rB6rsFdzUE=', '2007-08-14', FALSE);
 
 -- Canzone 115 (Rolling Stone) non importata: doppione di 'Like a Rolling Stone' (stesso URL)
 -- Canzone 175 (Bad Habit) non importata: URL sbagliato (era quello di 'Bad Habits' di Ed Sheeran)

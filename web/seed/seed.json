@@ -4,7 +4,7 @@
    "id": 1,
    "nickname": "ivibe_admin",
    "email": "ivibe_admin@ivibe.local",
-   "password": "pbkdf2$65536$E0+e2QnpS1NHzk3ogbOJzQ==$ej2KWVkJQJ1594RLkFlL38K+ADIhHqz/3hOEURhEt5A=",
+   "password": "pbkdf2$65536$iuDdNRuOUTO8l4NiGhXGkA==$JKQ0aI99rhwBifMCZrS44Xhseq5SiHv1FLKYQkt65Wg=",
    "dataNascita": "2026-04-11",
    "isAdmin": true,
    "creato": "2026-04-11T00:00:00.000Z"
@@ -13,7 +13,7 @@
    "id": 2,
    "nickname": "iVibe_admin1",
    "email": "ivibe_admin1@ivibe.local",
-   "password": "pbkdf2$65536$wfHx3SZVQM8UpeZuNw8rcA==$hw//BjJAeKxMdwUNkWYGVoIpN960QRatfl6kluIszkg=",
+   "password": "pbkdf2$65536$7htTqME/EWw6JBq0Vu6h9A==$WN8nIRfM5RByL4hG/lT4rJv54STDfTUMFmxwvz1ytbo=",
    "dataNascita": "2026-04-11",
    "isAdmin": true,
    "creato": "2026-04-11T00:00:00.000Z"
@@ -22,7 +22,7 @@
    "id": 4,
    "nickname": "phippomiao",
    "email": "phippomiao@gmail.com",
-   "password": "pbkdf2$65536$Q5tDCbPc7poNkTb5nZDtfQ==$WkbXjp0rN9LzV1GS3KpMl9mZug9+Z8eCdcESNORKDRc=",
+   "password": "pbkdf2$65536$Q6d3+cXHOrBHMTtHIuF4EQ==$NpJIpdeSUxTHYaGHsahPAJLED68A6OZKxtv57Cc/jq8=",
    "dataNascita": "2008-05-12",
    "isAdmin": false,
    "creato": "2026-04-11T00:00:00.000Z"
@@ -31,7 +31,7 @@
    "id": 5,
    "nickname": "Zigga",
    "email": "zigga@gmail.com",
-   "password": "pbkdf2$65536$Jh2f3GIuVXxd5FcOn81qpw==$G3yDoK0JVbhsI20G2+wLRjj352cIGlv4+tea3ewYLy8=",
+   "password": "pbkdf2$65536$JugT8xqDeTHGt4xOuMy4FQ==$5uoya1+yGElR90J4h0uxN3IfgAD5MoP79rB6rsFdzUE=",
    "dataNascita": "2007-08-14",
    "isAdmin": false,
    "creato": "2026-04-11T00:00:00.000Z"
@@ -1447,5 +1447,6 @@
     5
    ]
   }
- ]
+ ],
+ "versionePassword": 2
 }
