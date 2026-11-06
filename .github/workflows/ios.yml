@@ -2,10 +2,8 @@
 # Si installa sull'iPhone con Sideloadly (o AltStore) usando il proprio ID Apple: vedi README.
 name: App iPhone
 
+# (non parte più da sola: si avvia a mano da GitHub > Actions > App iPhone > Run workflow)
 on:
-  push:
-    branches: [main]
-    paths: ['web/public/**', 'mobile/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
 permissions:

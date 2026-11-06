@@ -98,41 +98,27 @@ Serve Node 20 o più recente. Senza `DATABASE_URL` i dati vanno in `web/data/ivi
 
 ---
 
-## 📱 App per telefono
+## 📱 App Android (APK)
 
-### Android: app vera (APK)
-- GitHub costruisce l'app da solo a ogni modifica (cartella [`mobile/`](mobile), workflow
-  [`android.yml`](.github/workflows/android.yml)) e la pubblica nella Release **android**:
-  **https://github.com/chrifilvpn/ivibe/releases/download/android/iVibe.apk**
-- Sul telefono apri quel link, scarica `iVibe.apk` e aprilo. La prima volta Android chiede di
-  consentire l'installazione di app "da questa fonte": consenti e installa.
-- Al primo avvio, sotto il login, c'è **Server: … · cambia** per scegliere dove gira iVibe
-  (Render oppure il PC di casa, es. `http://192.168.1.20:3000`).
-- L'interfaccia è dentro l'app: **senza campo si apre lo stesso** (catalogo, playlist e
-  preferiti dell'ultima volta) e suonano le canzoni scaricate.
+Un'app vera, **autonoma**: non serve nessun server.
+- **Tutti i dati restano nel telefono**: utenti (anche quelli nuovi), canzoni aggiunte dall'admin,
+  preferiti, playlist e canzoni scaricate. Restano dopo lo spegnimento; si perdono solo
+  disinstallando l'app o cancellandone i dati.
+- **yt-dlp è dentro l'app** (libreria [youtubedl-android](https://github.com/yausername/youtubedl-android)):
+  i download partono dal telefono (3 alla volta) e yt-dlp si aggiorna da solo quando c'è internet.
+- **Senza campo** l'app si apre normalmente e suonano le canzoni scaricate. Con internet le
+  canzoni non scaricate suonano in streaming (e con "scarica in automatico" vengono salvate).
+- Al primo avvio carica il catalogo e gli account iniziali (password `password`).
 
-### iPhone: app vera (.ipa) con Sideloadly
-GitHub costruisce l'app su un Mac (workflow [`ios.yml`](.github/workflows/ios.yml)) e la pubblica in
-**https://github.com/chrifilvpn/ivibe/releases/download/ios/iVibe.ipa** (non firmata).
-Per installarla serve un PC (Windows o Mac) e un ID Apple gratuito:
-1. Sul PC installa **iTunes** e **iCloud** dal sito Apple (non dal Microsoft Store) e **Sideloadly** (sideloadly.io).
-2. Collega l'iPhone con il cavo, sblocca il telefono e tocca *Autorizza*.
-3. In Sideloadly trascina `iVibe.ipa`, scrivi il tuo ID Apple e premi **Start** (ti chiede la password Apple).
-4. Sull'iPhone: *Impostazioni → Generali → VPN e gestione dispositivi* → tocca il tuo ID Apple → **Autorizza**.
-5. Da iOS 16: *Impostazioni → Privacy e sicurezza → Modalità sviluppatore* → attiva e riavvia.
+**Scaricare e installare:** https://github.com/chrifilvpn/ivibe/releases/download/android/iVibe.apk
+→ apri il file sul telefono → consenti l'installazione da questa fonte → Installa.
+Per aggiornare l'app basta reinstallarla dallo stesso link: i dati restano.
 
-Con un ID Apple gratuito l'app **scade dopo 7 giorni**: si rinnova rifacendo il punto 3 (le canzoni
-scaricate restano) oppure attivando in Sideloadly il rinnovo automatico. Con l'account sviluppatore
-Apple a pagamento (99 €/anno) dura un anno.
-
-### iPhone, in alternativa: web app dalla schermata Home
-Un'app iOS "vera" richiede un Mac con Xcode e un account Apple sviluppatore. Senza Mac:
-apri il sito in **Safari** → **Condividi** → **Aggiungi alla schermata Home**. Si apre a
-schermo intero, funziona senza campo e suona le canzoni scaricate. Su iPhone la musica può
-fermarsi con lo schermo bloccato (limite di iOS per le web app).
-
-### "Solo per me"
-Su Render (o nel PC) imposta `REGISTRAZIONI=false`: nessuno può più creare account.
+Come è fatta: [`mobile/`](mobile) (Capacitor) mette l'interfaccia di `web/public` dentro l'APK;
+[`web/public/locale.js`](web/public/locale.js) fa da "server" salvando i dati nel telefono;
+[`mobile/android-extra/YtDlpPlugin.java`](mobile/android-extra/YtDlpPlugin.java) è il plugin nativo
+che usa yt-dlp. GitHub Actions ([`android.yml`](.github/workflows/android.yml)) costruisce l'APK a
+ogni modifica e lo pubblica nella Release **android**.
 
 ---
 
