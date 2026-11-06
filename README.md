@@ -98,6 +98,30 @@ Serve Node 20 o più recente. Senza `DATABASE_URL` i dati vanno in `web/data/ivi
 
 ---
 
+## 📱 App per telefono
+
+### Android: app vera (APK)
+- GitHub costruisce l'app da solo a ogni modifica (cartella [`mobile/`](mobile), workflow
+  [`android.yml`](.github/workflows/android.yml)) e la pubblica nella Release **android**:
+  **https://github.com/chrifilvpn/ivibe/releases/download/android/iVibe.apk**
+- Sul telefono apri quel link, scarica `iVibe.apk` e aprilo. La prima volta Android chiede di
+  consentire l'installazione di app "da questa fonte": consenti e installa.
+- Al primo avvio, sotto il login, c'è **Server: … · cambia** per scegliere dove gira iVibe
+  (Render oppure il PC di casa, es. `http://192.168.1.20:3000`).
+- L'interfaccia è dentro l'app: **senza campo si apre lo stesso** (catalogo, playlist e
+  preferiti dell'ultima volta) e suonano le canzoni scaricate.
+
+### iPhone: web app dalla schermata Home
+Un'app iOS "vera" richiede un Mac con Xcode e un account Apple sviluppatore. Senza Mac:
+apri il sito in **Safari** → **Condividi** → **Aggiungi alla schermata Home**. Si apre a
+schermo intero, funziona senza campo e suona le canzoni scaricate. Su iPhone la musica può
+fermarsi con lo schermo bloccato (limite di iOS per le web app).
+
+### "Solo per me"
+Su Render (o nel PC) imposta `REGISTRAZIONI=false`: nessuno può più creare account.
+
+---
+
 ## 🖥 App desktop (JavaFX + MySQL)
 
 ### Come avviarla
