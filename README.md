@@ -73,6 +73,11 @@ Variabili utili su Render (*Environment*):
 3. Doppio clic su `avvia-windows.bat`: si apre `http://localhost:3000`.
    Non serve installare niente: yt-dlp è già nel progetto e si aggiorna da solo.
 
+### Usarlo su Linux senza essere amministratore
+Nella cartella del progetto: tasto destro → **Apri nel terminale** → scrivi `bash avvia-linux.sh`.
+La prima volta scarica Node.js e yt-dlp nella cartella `tools/` (serve internet), poi apre
+`http://localhost:3000`.
+
 ### Provarlo sul tuo PC
 ```bash
 cd web
