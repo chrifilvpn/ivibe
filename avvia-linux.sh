@@ -37,6 +37,7 @@ if [ -z "$NODE" ]; then
   rm -f "tools/$NOME"
   NODE="$(ls -d "$DIR"/tools/node-*/bin/node | head -n1)"
 fi
+chmod +x "$NODE" web/bin/yt-dlp 2>/dev/null || true   # se lo ZIP ha perso i permessi
 echo "== Node: $("$NODE" -v)"
 
 # ---- yt-dlp per i download (si aggiorna da solo a ogni avvio)

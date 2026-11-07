@@ -1,0 +1,69 @@
+# Crea ZIP "pronti all'uso" con Node.js e yt-dlp già dentro (niente da scaricare o installare):
+#   ivibe-linux.zip   -> bash avvia-linux.sh
+#   ivibe-windows.zip -> doppio clic su avvia-windows.bat
+# Li pubblica nella Release "pacchetti".
+name: Pacchetti pronti
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'avvia-*', '.github/workflows/pacchetti.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepara la cartella comune
+        run: |
+          mkdir -p out
+          git archive --format=tar --prefix=ivibe/ HEAD | tar -x -C out
+          rm -rf out/ivibe/mobile out/ivibe/.github
+
+      - name: Pacchetto Linux
+        run: |
+          BASE=https://nodejs.org/dist/latest-v22.x
+          NOME=$(curl -fsL $BASE/SHASUMS256.txt | grep -o 'node-v[0-9.]*-linux-x64.tar.xz' | head -n1)
+          cp -r out/ivibe linux-ivibe
+          mkdir -p linux-ivibe/tools linux-ivibe/web/bin
+          curl -fsL $BASE/$NOME | tar -xJ -C linux-ivibe/tools
+          curl -fsL -o linux-ivibe/web/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+          chmod +x linux-ivibe/web/bin/yt-dlp linux-ivibe/avvia-linux.sh linux-ivibe/tools/node-*/bin/node
+          mkdir z && mv linux-ivibe z/ivibe
+          (cd z && zip -qry ../ivibe-linux.zip ivibe)
+          ls -la ivibe-linux.zip
+
+      - name: Pacchetto Windows
+        run: |
+          cp -r out/ivibe win-ivibe
+          mkdir -p win-ivibe/web/bin
+          curl -fsL -o win-ivibe/node.exe https://nodejs.org/dist/latest-v22.x/win-x64/node.exe
+          curl -fsL -o win-ivibe/web/bin/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+          mkdir w && mv win-ivibe w/ivibe
+          (cd w && zip -qr ../ivibe-windows.zip ivibe)
+          ls -la ivibe-windows.zip
+
+      - name: Prova veloce del pacchetto Linux
+        run: |
+          cd z/ivibe
+          (PORT=3999 tools/node-*/bin/node web/server.js &) ; sleep 3
+          curl -fs http://localhost:3999/healthz
+          web/bin/yt-dlp --version
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pacchetti
+          name: iVibe pronto all'uso (PC)
+          body: |
+            ZIP con Node.js e yt-dlp già inclusi: non serve installare niente.
+            - **Linux**: estrai `ivibe-linux.zip`, apri il terminale nella cartella e scrivi `bash avvia-linux.sh`
+            - **Windows**: estrai `ivibe-windows.zip` e fai doppio clic su `avvia-windows.bat`
+          files: |
+            ivibe-linux.zip
+            ivibe-windows.zip
+          make_latest: false
